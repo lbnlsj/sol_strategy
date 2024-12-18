@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana 交易机器人</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+        .modal-content {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- 策略模板编辑弹窗 -->
+    <div id="strategyModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center overflow-y-auto">
+        <div class="bg-white rounded-lg p-6 w-[500px] my-8 modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold" id="modalTitle">策略模板</h3>
+                <button onclick="closeStrategyModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">模板名称</label>
+                    <input type="text" id="templateName" class="w-full px-3 py-2 border rounded-md">
+                </div>
+
+                <!-- 钱包群组选择 -->
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">选择钱包群组</label>
+                    <select id="walletGroup" class="w-full px-3 py-2 border rounded-md">
+                        <!-- 钱包群组将通过 JavaScript 动态填充 -->
+                    </select>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">买入金额 (SOL)</label>
+                    <input type="number" id="templateBuyAmount" class="w-full px-3 py-2 border rounded-md" value="0.5" step="0.1">
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">买入优先费</label>
+                    <input type="number" id="templateBuyPriority" class="w-full px-3 py-2 border rounded-md" value="0.003" step="0.001">
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">卖出优先费</label>
+                    <input type="number" id="templateSellPriority" class="w-full px-3 py-2 border rounded-md" value="0.003" step="0.001">
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">止损优先费</label>
+                    <input type="number" id="templateStopPriority" class="w-full px-3 py-2 border rounded-md" value="0.003" step="0.001">
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">滑点</label>
+                    <input type="number" id="templateSlippage" class="w-full px-3 py-2 border rounded-md" value="0.25" step="0.01">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">移动止损</label>
+                        <div class="flex">
+                            <input type="number" id="templateTrailingStop" class="w-full px-3 py-2 border rounded-l-md" value="50">
+                            <span class="px-3 py-2 bg-gray-100 border-t border-r border-b rounded-r-md">%</span>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">卖出</label>
+                        <div class="flex">
+                            <input type="number" id="templateSellPercent" class="w-full px-3 py-2 border rounded-l-md" value="100">
+                            <span class="px-3 py-2 bg-gray-100 border-t border-r border-b rounded-r-md">%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 止盈止损设置移到最后 -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="block text-sm font-medium text-gray-700">止盈止损</label>
+                        <button onclick="addStopLevel()" class="text-sm text-blue-500">添加级别</button>
+                    </div>
+                    <div id="stopLevelsList" class="space-y-2">
+                        <!-- 动态添加的止盈止损级别 -->
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button onclick="closeStrategyModal()" class="px-4 py-2 border rounded-md hover:bg-gray-100">取消</button>
+                <button onclick="saveStrategyTemplate()" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 钱包群组管理弹窗 -->
+    <div id="walletGroupModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-[500px] modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold">钱包群组管理</h3>
+                <button onclick="closeWalletGroupModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="flex gap-4">
+                    <input type="text" id="groupName" placeholder="群组名称" class="flex-1 border rounded px-3 py-2">
+                    <button onclick="createWalletGroup()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        创建群组
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium">添加钱包</label>
+                    <textarea id="walletAddresses" rows="4" class="w-full px-3 py-2 border rounded-md"
+                              placeholder="输入钱包私钥，每行一个"></textarea>
+                </div>
+                <div id="walletGroupList" class="space-y-2">
+                    <!-- 钱包群组列表将通过 JavaScript 动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- 钱包群组管理面板 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">钱包群组</h2>
+                <button onclick="showWalletGroupModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    管理钱包群组
+                </button>
+            </div>
+            <div id="walletGroupsDisplay" class="space-y-4">
+                <!-- 钱包群组列表将在这里动态生成 -->
+            </div>
+        </div>
+
+        <!-- 策略模板管理面板 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">策略模板</h2>
+                <button onclick="showNewStrategyModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    新建策略
+                </button>
+            </div>
+            <div id="strategyTemplateList" class="space-y-4">
+                <!-- 策略模板列表将在这里动态生成 -->
+            </div>
+        </div>
+
+        <!-- 交易执行面板 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">交易执行</h2>
+            <div class="space-y-6">
+                <div class="space-y-2">
+                    <label class="block font-medium">选择策略模板</label>
+                    <select id="strategySelection" class="w-full px-3 py-2 border rounded-md">
+                        <!-- 策略选择项将在这里动态生成 -->
+                    </select>
+                </div>
+
+                <div class="flex justify-end space-x-4">
+                    <button onclick="startTrading()" class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600">
+                        开始交易
+                    </button>
+                    <button onclick="stopTrading()" class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600">
+                        停止交易
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/main.js"></script>
+</body>
+</html>
