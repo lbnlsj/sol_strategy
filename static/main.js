@@ -1,20 +1,21 @@
-// 存储策略模板和钱包群组的数组
+// 存储策略模板和钱包的数组
 let strategyTemplates = [];
-let walletGroups = [];
+let wallets = [];
 let editingTemplateIndex = null;
 
 // 初始化示例数据
 function initializeData() {
-    // 添加示例钱包群组
-    walletGroups.push({
-        name: "默认群组",
-        wallets: []
+    // 添加示例钱包
+    wallets.push({
+        name: "示例钱包",
+        address: "12345...abcde",
+        privateKey: "example_private_key"
     });
 
     // 添加示例策略模板
     strategyTemplates.push({
         name: "默认策略",
-        walletGroup: "默认群组",
+        selectedWallets: ["12345...abcde"], // 存储钱包地址
         buyAmount: 0.5,
         buyPriority: 0.003,
         sellPriority: 0.003,
@@ -31,73 +32,97 @@ function initializeData() {
         ]
     });
 
-    refreshWalletGroups();
+    refreshWalletList();
     refreshTemplateList();
 }
 
-// 钱包群组管理功能
-function showWalletGroupModal() {
-    document.getElementById('walletGroupModal').classList.remove('hidden');
+// 钱包管理功能
+function showWalletModal() {
+    document.getElementById('walletModal').classList.remove('hidden');
 }
 
-function closeWalletGroupModal() {
-    document.getElementById('walletGroupModal').classList.add('hidden');
+function closeWalletModal() {
+    document.getElementById('walletModal').classList.add('hidden');
+    document.getElementById('walletName').value = '';
+    document.getElementById('walletPrivateKey').value = '';
 }
 
-function createWalletGroup() {
-    const name = document.getElementById('groupName').value;
-    const walletKeys = document.getElementById('walletAddresses').value
-        .split('\n')
-        .filter(key => key.trim() !== '');
+function addWallet() {
+    const name = document.getElementById('walletName').value;
+    const privateKey = document.getElementById('walletPrivateKey').value;
 
-    if (!name) {
-        alert('请输入群组名称');
+    if (!name || !privateKey) {
+        alert('请填写钱包名称和私钥');
         return;
     }
 
-    walletGroups.push({
+    // 这里应该添加私钥验证逻辑
+    const address = `${privateKey.substring(0, 5)}...${privateKey.substring(privateKey.length - 5)}`;
+
+    wallets.push({
         name: name,
-        wallets: walletKeys
+        address: address,
+        privateKey: privateKey
     });
 
-    refreshWalletGroups();
-    closeWalletGroupModal();
+    refreshWalletList();
+    closeWalletModal();
 }
 
-function deleteWalletGroup(index) {
-    if (confirm('确定要删除这个钱包群组吗？')) {
-        walletGroups.splice(index, 1);
-        refreshWalletGroups();
+function deleteWallet(index) {
+    if (confirm('确定要删除这个钱包吗？')) {
+        const deletedWallet = wallets[index];
+        wallets.splice(index, 1);
+
+        // 从所有策略中移除被删除的钱包
+        strategyTemplates.forEach(template => {
+            template.selectedWallets = template.selectedWallets.filter(addr => addr !== deletedWallet.address);
+        });
+
+        refreshWalletList();
+        refreshTemplateList();
     }
 }
 
-function refreshWalletGroups() {
-    // 更新钱包群组显示列表
-    const container = document.getElementById('walletGroupsDisplay');
+function refreshWalletList() {
+    const container = document.getElementById('walletList');
     container.innerHTML = '';
 
-    walletGroups.forEach((group, index) => {
+    wallets.forEach((wallet, index) => {
         const div = document.createElement('div');
         div.className = 'border rounded-lg p-4';
         div.innerHTML = `
-            <div class="flex justify-between items-center mb-2">
-                <h3 class="font-semibold">${group.name}</h3>
-                <button onclick="deleteWalletGroup(${index})" class="text-red-500 hover:text-red-600">删除</button>
-            </div>
-            <div class="text-sm text-gray-600">
-                钱包数量: ${group.wallets.length}
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="font-semibold">${wallet.name} <span class="text-gray-500">(${wallet.address})</span></h3>
+                </div>
+                <button onclick="deleteWallet(${index})" class="text-red-500 hover:text-red-600">删除</button>
             </div>
         `;
         container.appendChild(div);
     });
 
-    // 更新策略模板中的钱包群组选择下拉框
-    const select = document.getElementById('walletGroup');
-    if (select) {
-        select.innerHTML = walletGroups.map(group =>
-            `<option value="${group.name}">${group.name}</option>`
-        ).join('');
-    }
+// 更新策略模板中的钱包选择
+    updateWalletSelection();
+}
+
+function updateWalletSelection() {
+    const container = document.getElementById('walletSelection');
+    if (!container) return;
+
+    container.innerHTML = wallets.map(wallet => `
+        <div class="flex items-center space-x-2 py-1">
+            <input type="checkbox" 
+                id="wallet-${wallet.address}" 
+                value="${wallet.address}"
+                class="wallet-checkbox"
+                ${editingTemplateIndex !== null &&
+    strategyTemplates[editingTemplateIndex].selectedWallets.includes(wallet.address) ? 'checked' : ''}>
+            <label for="wallet-${wallet.address}" class="text-sm">
+                ${wallet.name} <span class="text-gray-500">(${wallet.address})</span>
+            </label>
+        </div>
+    `).join('');
 }
 
 // 策略模板管理功能
@@ -105,6 +130,7 @@ function showNewStrategyModal() {
     editingTemplateIndex = null;
     document.getElementById('modalTitle').textContent = '新建策略模板';
     clearModalInputs();
+    updateWalletSelection();
     document.getElementById('strategyModal').classList.remove('hidden');
 }
 
@@ -113,6 +139,7 @@ function showEditStrategyModal(index) {
     const template = strategyTemplates[index];
     document.getElementById('modalTitle').textContent = '编辑策略模板';
     fillModalWithTemplate(template);
+    updateWalletSelection();
     document.getElementById('strategyModal').classList.remove('hidden');
 }
 
@@ -127,15 +154,13 @@ function clearModalInputs() {
     document.getElementById('templateSellPercent').value = '100';
     document.getElementById('stopLevelsList').innerHTML = '';
 
-    // 设置默认钱包群组
-    if (walletGroups.length > 0) {
-        document.getElementById('walletGroup').value = walletGroups[0].name;
-    }
+    // 清除所有钱包选择
+    const checkboxes = document.querySelectorAll('.wallet-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = false);
 }
 
 function fillModalWithTemplate(template) {
     document.getElementById('templateName').value = template.name;
-    document.getElementById('walletGroup').value = template.walletGroup;
     document.getElementById('templateBuyAmount').value = template.buyAmount;
     document.getElementById('templateBuyPriority').value = template.buyPriority;
     document.getElementById('templateSellPriority').value = template.sellPriority;
@@ -151,52 +176,14 @@ function fillModalWithTemplate(template) {
     });
 }
 
-function closeStrategyModal() {
-    document.getElementById('strategyModal').classList.add('hidden');
-}
-
-function addStopLevelToUI(increase = '', sell = '') {
-    const container = document.createElement('div');
-    container.className = 'flex gap-4 items-center';
-    container.innerHTML = `
-        <div class="flex-1">
-            <input type="number" class="w-full px-3 py-2 border rounded-md stop-increase" value="${increase}" placeholder="涨幅" step="any">
-        </div>
-        <div class="flex-1">
-            <input type="number" class="w-full px-3 py-2 border rounded-md stop-sell" value="${sell}" placeholder="卖出" step="any">
-        </div>
-        <button onclick="this.parentElement.remove()" class="text-red-500">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-        </button>
-    `;
-    document.getElementById('stopLevelsList').appendChild(container);
-}
-
-function addStopLevel() {
-    addStopLevelToUI();
-}
-
-function collectStopLevels() {
-    const levels = [];
-    document.querySelectorAll('#stopLevelsList > div').forEach(div => {
-        const increase = div.querySelector('.stop-increase').value;
-        const sell = div.querySelector('.stop-sell').value;
-        if (increase && sell) {
-            levels.push({
-                increase: parseFloat(increase),
-                sell: parseFloat(sell)
-            });
-        }
-    });
-    return levels;
-}
-
 function saveStrategyTemplate() {
+    // 获取选中的钱包
+    const selectedWallets = Array.from(document.querySelectorAll('.wallet-checkbox:checked'))
+        .map(checkbox => checkbox.value);
+
     const template = {
         name: document.getElementById('templateName').value,
-        walletGroup: document.getElementById('walletGroup').value,
+        selectedWallets: selectedWallets,
         buyAmount: parseFloat(document.getElementById('templateBuyAmount').value),
         buyPriority: parseFloat(document.getElementById('templateBuyPriority').value),
         sellPriority: parseFloat(document.getElementById('templateSellPriority').value),
@@ -208,8 +195,14 @@ function saveStrategyTemplate() {
     };
 
     // 验证必填字段
-    if (!template.name || !template.walletGroup) {
-        alert('请填写模板名称和选择钱包群组');
+    if (!template.name) {
+        alert('请填写模板名称');
+        return;
+    }
+
+    // 验证是否选择了钱包
+    if (template.selectedWallets.length === 0) {
+        alert('请至少选择一个钱包');
         return;
     }
 
@@ -229,20 +222,6 @@ function saveStrategyTemplate() {
     closeStrategyModal();
 }
 
-function deleteTemplate(index) {
-    if (confirm('确定要删除这个策略模板吗？')) {
-        strategyTemplates.splice(index, 1);
-        refreshTemplateList();
-    }
-}
-
-function duplicateTemplate(index) {
-    const template = {...strategyTemplates[index]};
-    template.name = `${template.name} (复制)`;
-    strategyTemplates.push(template);
-    refreshTemplateList();
-}
-
 function refreshTemplateList() {
     const container = document.getElementById('strategyTemplateList');
     container.innerHTML = '';
@@ -250,6 +229,11 @@ function refreshTemplateList() {
     strategySelect.innerHTML = '';
 
     strategyTemplates.forEach((template, index) => {
+        // 获取选中钱包的名称列表
+        const selectedWalletNames = template.selectedWallets
+            .map(addr => wallets.find(w => w.address === addr)?.name || '未知钱包')
+            .join(', ');
+
         // 添加到模板列表
         const div = document.createElement('div');
         div.className = 'border rounded-lg p-4';
@@ -263,7 +247,7 @@ function refreshTemplateList() {
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                <div>钱包群组: ${template.walletGroup}</div>
+                <div class="col-span-2">选中钱包: ${selectedWalletNames}</div>
                 <div>买入金额: ${template.buyAmount} SOL</div>
                 <div>滑点: ${template.slippage}%</div>
                 <div>买入优先费: ${template.buyPriority}</div>
@@ -292,21 +276,62 @@ function startTrading() {
     }
 
     const selectedStrategy = strategyTemplates[selectedStrategyIndex];
-    const selectedGroup = walletGroups.find(group => group.name === selectedStrategy.walletGroup);
+    const selectedWalletNames = selectedStrategy.selectedWallets
+        .map(addr => wallets.find(w => w.address === addr)?.name || '未知钱包')
+        .join(', ');
 
-    if (!selectedGroup || selectedGroup.wallets.length === 0) {
-        alert('所选策略的钱包群组中没有钱包');
+    if (selectedStrategy.selectedWallets.length === 0) {
+        alert('所选策略没有选择钱包');
         return;
     }
 
     alert(`开始交易
 策略: ${selectedStrategy.name}
-钱包群组: ${selectedStrategy.walletGroup}
-钱包数量: ${selectedGroup.wallets.length}`);
+选中钱包: ${selectedWalletNames}
+钱包数量: ${selectedStrategy.selectedWallets.length}`);
 }
 
-function stopTrading() {
-    alert('交易已停止');
+// 其他辅助函数保持不变
+function closeStrategyModal() {
+    document.getElementById('strategyModal').classList.add('hidden');
+}
+
+function addStopLevel() {
+    addStopLevelToUI();
+}
+
+function addStopLevelToUI(increase = '', sell = '') {
+    const container = document.createElement('div');
+    container.className = 'flex gap-4 items-center';
+    container.innerHTML = `
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-increase" value="${increase}" placeholder="涨幅" step="any">
+        </div>
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-sell" value="${sell}" placeholder="卖出" step="any">
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-red-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    `;
+    document.getElementById('stopLevelsList').appendChild(container);
+}
+
+function collectStopLevels() {
+    const levels = [];
+    document.querySelectorAll('#stopLevelsList > div').forEach(div => {
+        const increase = div.querySelector('.stop-increase').value;
+        const sell = div.querySelector('.stop-sell').value;
+        if (increase && sell) {
+            levels.push({
+                increase: parseFloat(increase),
+                sell: parseFloat(sell)
+            });
+        }
+    });
+    return levels;
 }
 
 // 页面加载完成后初始化数据
