@@ -85,9 +85,34 @@
                     </div>
                 </div>
 
-                <div class="space-y-2">
-                    <label class="block text-sm font-medium text-gray-700">买入金额 (SOL)</label>
-                    <input type="number" id="templateBuyAmount" class="w-full px-3 py-2 border rounded-md" value="0.5" step="0.1">
+                <!-- 模式选择 -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">极速模式</label>
+                        <select id="templateSpeedMode" class="w-full px-3 py-2 border rounded-md">
+                            <option value="normal">普通</option>
+                            <option value="fast">极速</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">防夹模式</label>
+                        <select id="templateAntiSqueeze" class="w-full px-3 py-2 border rounded-md">
+                            <option value="off">关闭</option>
+                            <option value="on">开启</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 买入金额范围 -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">最小买入金额 (SOL)</label>
+                        <input type="number" id="templateMinBuyAmount" class="w-full px-3 py-2 border rounded-md" value="0.3" step="0.1">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">最大买入金额 (SOL)</label>
+                        <input type="number" id="templateMaxBuyAmount" class="w-full px-3 py-2 border rounded-md" value="0.5" step="0.1">
+                    </div>
                 </div>
 
                 <div class="space-y-2">
@@ -114,14 +139,14 @@
                     <div class="space-y-2">
                         <label class="block text-sm font-medium text-gray-700">移动止损</label>
                         <div class="flex">
-                            <input type="number" id="templateTrailingStop" class="w-full px-3 py-2 border rounded-l-md" value="50">
+                            <input type="number" id="templateTrailingStop" class="w-full px-3 py-2 border rounded-l-md" value="50" step="0.1">
                             <span class="px-3 py-2 bg-gray-100 border-t border-r border-b rounded-r-md">%</span>
                         </div>
                     </div>
                     <div class="space-y-2">
                         <label class="block text-sm font-medium text-gray-700">卖出</label>
                         <div class="flex">
-                            <input type="number" id="templateSellPercent" class="w-full px-3 py-2 border rounded-l-md" value="100">
+                            <input type="number" id="templateSellPercent" class="w-full px-3 py-2 border rounded-l-md" value="100" step="0.1">
                             <span class="px-3 py-2 bg-gray-100 border-t border-r border-b rounded-r-md">%</span>
                         </div>
                     </div>

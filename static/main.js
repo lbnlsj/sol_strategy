@@ -15,8 +15,11 @@ function initializeData() {
     // 添加示例策略模板
     strategyTemplates.push({
         name: "默认策略",
-        selectedWallets: ["12345...abcde"], // 存储钱包地址
-        buyAmount: 0.5,
+        selectedWallets: ["12345...abcde"],
+        minBuyAmount: 0.3,
+        maxBuyAmount: 0.5,
+        speedMode: "normal",
+        antiSqueeze: "off",
         buyPriority: 0.003,
         sellPriority: 0.003,
         stopPriority: 0.003,
@@ -24,11 +27,11 @@ function initializeData() {
         trailingStop: 50,
         sellPercent: 100,
         stopLevels: [
-            {increase: -30, sell: 100},
-            {increase: 100, sell: 10},
-            {increase: 200, sell: 20},
-            {increase: 300, sell: 30},
-            {increase: 500, sell: 50}
+            {increase: -30, sell: 100, position: 100},
+            {increase: 100, sell: 10, position: 9},
+            {increase: 200, sell: 20, position: 16.2},
+            {increase: 300, sell: 30, position: 21.87},
+            {increase: 500, sell: 50, position: 32.81}
         ]
     });
 
@@ -102,7 +105,7 @@ function refreshWalletList() {
         container.appendChild(div);
     });
 
-// 更新策略模板中的钱包选择
+    // 更新策略模板中的钱包选择
     updateWalletSelection();
 }
 
@@ -125,27 +128,13 @@ function updateWalletSelection() {
     `).join('');
 }
 
-// 策略模板管理功能
-function showNewStrategyModal() {
-    editingTemplateIndex = null;
-    document.getElementById('modalTitle').textContent = '新建策略模板';
-    clearModalInputs();
-    updateWalletSelection();
-    document.getElementById('strategyModal').classList.remove('hidden');
-}
-
-function showEditStrategyModal(index) {
-    editingTemplateIndex = index;
-    const template = strategyTemplates[index];
-    document.getElementById('modalTitle').textContent = '编辑策略模板';
-    fillModalWithTemplate(template);
-    updateWalletSelection();
-    document.getElementById('strategyModal').classList.remove('hidden');
-}
 
 function clearModalInputs() {
     document.getElementById('templateName').value = '';
-    document.getElementById('templateBuyAmount').value = '0.5';
+    document.getElementById('templateMinBuyAmount').value = '0.3';
+    document.getElementById('templateMaxBuyAmount').value = '0.5';
+    document.getElementById('templateSpeedMode').value = 'normal';
+    document.getElementById('templateAntiSqueeze').value = 'off';
     document.getElementById('templateBuyPriority').value = '0.003';
     document.getElementById('templateSellPriority').value = '0.003';
     document.getElementById('templateStopPriority').value = '0.003';
@@ -159,9 +148,158 @@ function clearModalInputs() {
     checkboxes.forEach(checkbox => checkbox.checked = false);
 }
 
+
+// 获取当前行之前所有行的总卖出比例
+function getPreviousTotalSellPercentage(currentRow) {
+    let total = 0;
+    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
+    const currentIndex = allRows.indexOf(currentRow);
+
+    for (let i = 0; i < currentIndex; i++) {
+        const sellValue = parseFloat(allRows[i].querySelector('.stop-position').value) || 0;
+        total += sellValue / 100; // 转换为小数
+    }
+
+    return total;
+}
+
+// 更新总仓位比例（当卖出比例改变时调用）
+function updatePosition(sellInput) {
+    const currentRow = sellInput.closest('div').parentElement;
+    const positionInput = currentRow.querySelector('.stop-position');
+    const sellPercentage = parseFloat(sellInput.value) || 0;
+    const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
+
+    // 计算剩余仓位比例
+    const remainingPosition = 1 - previousTotalSell;
+
+    // 计算当前级别的总仓位比例
+    const positionPercentage = (sellPercentage / 100) * remainingPosition * 100;
+
+    // 更新总仓位比例输入框的值，保留2位小数
+    // positionInput.value = positionPercentage.toFixed(2);
+    positionInput.value = positionPercentage;
+
+    // 更新后续行的总仓位比例
+    updateSubsequentPositions(currentRow);
+}
+
+// 更新卖出比例（当总仓位比例改变时调用）
+function updateSell(positionInput) {
+    const currentRow = positionInput.closest('div').parentElement;
+    const sellInput = currentRow.querySelector('.stop-sell');
+    const positionPercentage = parseFloat(positionInput.value) || 0;
+    const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
+
+    // 计算剩余仓位比例
+    const remainingPosition = 1 - previousTotalSell;
+
+    // 计算卖出比例
+    const sellPercentage = (positionPercentage / 100) / remainingPosition * 100;
+
+    // 更新卖出比例输入框的值，保留2位小数
+    sellInput.value = sellPercentage.toFixed(2);
+
+    // 更新后续行的总仓位比例
+    updateSubsequentPositions(currentRow);
+}
+
+// 更新当前行之后的所有行的总仓位比例
+function updateSubsequentPositions(currentRow) {
+    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
+    const currentIndex = allRows.indexOf(currentRow);
+
+    for (let i = currentIndex + 1; i < allRows.length; i++) {
+        const row = allRows[i];
+        const sellInput = row.querySelector('.stop-sell');
+        updatePosition(sellInput);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// 将 addStopLevelToUI 改名为 addStopLevel
+function addStopLevel(increase = '', sell = '', position = '') {
+    const container = document.createElement('div');
+    container.className = 'flex gap-4 items-center';
+    container.innerHTML = `
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-increase" 
+                value="${increase}" placeholder="涨幅(%)" step="0.1"
+                min="-100" max="1000">
+        </div>
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-sell" 
+                value="${sell}" placeholder="卖出比例(%)" step="0.1"
+                min="0" max="100"
+                onchange="validatePercentageInput(this); updatePosition(this)" 
+                oninput="validatePercentageInput(this); updatePosition(this)">
+        </div>
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-position" 
+                value="${position}" placeholder="总仓位比例(%)" step="0.1"
+                min="0" max="100"
+                onchange="validatePercentageInput(this); updateSell(this)" 
+                oninput="validatePercentageInput(this); updateSell(this)">
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-red-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    `;
+    document.getElementById('stopLevelsList').appendChild(container);
+
+    // 为新添加的输入框设置初始值时触发更新
+    if (sell || position) {
+        const sellInput = container.querySelector('.stop-sell');
+        updatePosition(sellInput);
+    }
+}
+
+// 同时需要更新调用这个函数的地方
+function showNewStrategyModal() {
+    editingTemplateIndex = null;
+    document.getElementById('modalTitle').textContent = '新建策略模板';
+    clearModalInputs();
+    updateWalletSelection();
+    // 添加一个预设的空行
+    addStopLevel();
+    document.getElementById('strategyModal').classList.remove('hidden');
+}
+
+function showEditStrategyModal(index) {
+    editingTemplateIndex = index;
+    const template = strategyTemplates[index];
+    document.getElementById('modalTitle').textContent = '编辑策略模板';
+    fillModalWithTemplate(template);
+    updateWalletSelection();
+    // 如果没有止盈止损级别，添加一个空行
+    if (!template.stopLevels || template.stopLevels.length === 0) {
+        addStopLevel();
+    }
+    document.getElementById('strategyModal').classList.remove('hidden');
+}
+
 function fillModalWithTemplate(template) {
     document.getElementById('templateName').value = template.name;
-    document.getElementById('templateBuyAmount').value = template.buyAmount;
+    document.getElementById('templateMinBuyAmount').value = template.minBuyAmount;
+    document.getElementById('templateMaxBuyAmount').value = template.maxBuyAmount;
+    document.getElementById('templateSpeedMode').value = template.speedMode;
+    document.getElementById('templateAntiSqueeze').value = template.antiSqueeze;
     document.getElementById('templateBuyPriority').value = template.buyPriority;
     document.getElementById('templateSellPriority').value = template.sellPriority;
     document.getElementById('templateStopPriority').value = template.stopPriority;
@@ -172,19 +310,59 @@ function fillModalWithTemplate(template) {
     // 重新生成止盈止损级别
     document.getElementById('stopLevelsList').innerHTML = '';
     template.stopLevels.forEach(level => {
-        addStopLevelToUI(level.increase, level.sell);
+        addStopLevel(level.increase, level.sell, level.position);
     });
 }
 
+
+
+
+
+
+
+
+
+function validatePercentageInput(input) {
+    let value = parseFloat(input.value);
+    if (isNaN(value)) {
+        value = 0;
+    } else if (value < 0) {
+        value = 0;
+    } else if (value > 100) {
+        value = 100;
+    }
+    input.value = value;
+    return value;
+}
+
+function collectStopLevels() {
+    const levels = [];
+    document.querySelectorAll('#stopLevelsList > div').forEach(div => {
+        const increase = div.querySelector('.stop-increase').value;
+        const sell = div.querySelector('.stop-sell').value;
+        const position = div.querySelector('.stop-position').value;
+        if (increase && sell && position) {
+            levels.push({
+                increase: parseFloat(increase),
+                sell: parseFloat(sell),
+                position: parseFloat(position)
+            });
+        }
+    });
+    return levels;
+}
+
 function saveStrategyTemplate() {
-    // 获取选中的钱包
     const selectedWallets = Array.from(document.querySelectorAll('.wallet-checkbox:checked'))
         .map(checkbox => checkbox.value);
 
     const template = {
         name: document.getElementById('templateName').value,
         selectedWallets: selectedWallets,
-        buyAmount: parseFloat(document.getElementById('templateBuyAmount').value),
+        minBuyAmount: parseFloat(document.getElementById('templateMinBuyAmount').value),
+        maxBuyAmount: parseFloat(document.getElementById('templateMaxBuyAmount').value),
+        speedMode: document.getElementById('templateSpeedMode').value,
+        antiSqueeze: document.getElementById('templateAntiSqueeze').value,
         buyPriority: parseFloat(document.getElementById('templateBuyPriority').value),
         sellPriority: parseFloat(document.getElementById('templateSellPriority').value),
         stopPriority: parseFloat(document.getElementById('templateStopPriority').value),
@@ -194,7 +372,7 @@ function saveStrategyTemplate() {
         stopLevels: collectStopLevels()
     };
 
-    // 验证必填字段
+// 验证必填字段
     if (!template.name) {
         alert('请填写模板名称');
         return;
@@ -206,12 +384,19 @@ function saveStrategyTemplate() {
         return;
     }
 
+    // 验证买入金额范围
+    if (template.minBuyAmount > template.maxBuyAmount) {
+        alert('最小买入金额不能大于最大买入金额');
+        return;
+    }
+
     // 验证止盈止损级别
     if (template.stopLevels.length === 0) {
         alert('请至少添加一个止盈止损级别');
         return;
     }
 
+    // 保存模板
     if (editingTemplateIndex !== null) {
         strategyTemplates[editingTemplateIndex] = template;
     } else {
@@ -222,6 +407,24 @@ function saveStrategyTemplate() {
     closeStrategyModal();
 }
 
+function duplicateTemplate(index) {
+    const template = {...strategyTemplates[index]};
+    template.name = `${template.name} (复制)`;
+    strategyTemplates.push(template);
+    refreshTemplateList();
+}
+
+function deleteTemplate(index) {
+    if (confirm('确定要删除这个策略模板吗？')) {
+        strategyTemplates.splice(index, 1);
+        refreshTemplateList();
+    }
+}
+
+function closeStrategyModal() {
+    document.getElementById('strategyModal').classList.add('hidden');
+}
+
 function refreshTemplateList() {
     const container = document.getElementById('strategyTemplateList');
     container.innerHTML = '';
@@ -229,12 +432,10 @@ function refreshTemplateList() {
     strategySelect.innerHTML = '';
 
     strategyTemplates.forEach((template, index) => {
-        // 获取选中钱包的名称列表
         const selectedWalletNames = template.selectedWallets
             .map(addr => wallets.find(w => w.address === addr)?.name || '未知钱包')
             .join(', ');
 
-        // 添加到模板列表
         const div = document.createElement('div');
         div.className = 'border rounded-lg p-4';
         div.innerHTML = `
@@ -248,8 +449,10 @@ function refreshTemplateList() {
             </div>
             <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
                 <div class="col-span-2">选中钱包: ${selectedWalletNames}</div>
-                <div>买入金额: ${template.buyAmount} SOL</div>
+                <div>买入金额范围: ${template.minBuyAmount} - ${template.maxBuyAmount} SOL</div>
                 <div>滑点: ${template.slippage}%</div>
+                <div>极速模式: ${template.speedMode === 'fast' ? '开启' : '关闭'}</div>
+                <div>防夹模式: ${template.antiSqueeze === 'on' ? '开启' : '关闭'}</div>
                 <div>买入优先费: ${template.buyPriority}</div>
                 <div>卖出优先费: ${template.sellPriority}</div>
                 <div>止损优先费: ${template.stopPriority}</div>
@@ -259,7 +462,6 @@ function refreshTemplateList() {
         `;
         container.appendChild(div);
 
-        // 添加到策略选择下拉框
         const option = document.createElement('option');
         option.value = index;
         option.textContent = template.name;
@@ -291,48 +493,27 @@ function startTrading() {
 钱包数量: ${selectedStrategy.selectedWallets.length}`);
 }
 
-// 其他辅助函数保持不变
-function closeStrategyModal() {
-    document.getElementById('strategyModal').classList.add('hidden');
+function stopTrading() {
+    alert('停止交易');
 }
 
-function addStopLevel() {
-    addStopLevelToUI();
-}
-
-function addStopLevelToUI(increase = '', sell = '') {
-    const container = document.createElement('div');
-    container.className = 'flex gap-4 items-center';
-    container.innerHTML = `
-        <div class="flex-1">
-            <input type="number" class="w-full px-3 py-2 border rounded-md stop-increase" value="${increase}" placeholder="涨幅" step="any">
-        </div>
-        <div class="flex-1">
-            <input type="number" class="w-full px-3 py-2 border rounded-md stop-sell" value="${sell}" placeholder="卖出" step="any">
-        </div>
-        <button onclick="this.parentElement.remove()" class="text-red-500">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-        </button>
-    `;
-    document.getElementById('stopLevelsList').appendChild(container);
-}
-
-function collectStopLevels() {
-    const levels = [];
-    document.querySelectorAll('#stopLevelsList > div').forEach(div => {
-        const increase = div.querySelector('.stop-increase').value;
-        const sell = div.querySelector('.stop-sell').value;
-        if (increase && sell) {
-            levels.push({
-                increase: parseFloat(increase),
-                sell: parseFloat(sell)
-            });
+// 在页面加载完成后更新所有输入框的step属性
+function updateAllInputStepAttributes() {
+    const numericInputs = document.querySelectorAll('input[type="number"]');
+    numericInputs.forEach(input => {
+        if (input.id.includes('Priority')) {
+            input.setAttribute('step', '0.001');
+        } else if (input.id.includes('Slippage') ||
+            input.id.includes('BuyAmount') ||
+            input.id.includes('TrailingStop') ||
+            input.id.includes('SellPercent')) {
+            input.setAttribute('step', '0.1');
         }
     });
-    return levels;
 }
 
-// 页面加载完成后初始化数据
-document.addEventListener('DOMContentLoaded', initializeData);
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', () => {
+    initializeData();
+    updateAllInputStepAttributes();
+});
