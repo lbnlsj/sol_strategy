@@ -4,7 +4,12 @@ let wallets = [];
 let editingTemplateIndex = null;
 let activeStrategyIndex = null;
 
-// 页面加载时初始化数据
+
+
+
+// 在main.js中添加以下代码
+
+// 修改initializeData函数
 async function initializeData() {
     try {
         // 加载钱包数据
@@ -15,12 +20,99 @@ async function initializeData() {
         const strategiesResponse = await fetch('/api/strategies');
         strategyTemplates = await strategiesResponse.json();
 
+        // 加载当前激活的策略
+        const activeStrategyResponse = await fetch('/api/active-strategy');
+        const activeStrategyData = await activeStrategyResponse.json();
+        if (activeStrategyData.activeStrategy) {
+            const activeIndex = strategyTemplates.findIndex(
+                template => template.name === activeStrategyData.activeStrategy
+            );
+            if (activeIndex !== -1) {
+                activeStrategyIndex = activeIndex;
+            }
+        }
+
         refreshWalletList();
         refreshTemplateList();
     } catch (error) {
         console.error('Error loading data:', error);
     }
 }
+
+// 修改selectStrategy函数
+async function selectStrategy(index) {
+    try {
+        const template = strategyTemplates[index];
+        const response = await fetch('/api/active-strategy', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                strategyName: template.name
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to set active strategy');
+        }
+
+        activeStrategyIndex = index;
+        refreshTemplateList();
+        showToast(`已切换至策略: ${template.name}`);
+    } catch (error) {
+        console.error('Error selecting strategy:', error);
+        showToast('切换策略失败');
+    }
+}
+
+// 修改deleteTemplate函数
+async function deleteTemplate(index, event) {
+    event.stopPropagation();
+
+    if (confirm('确定要删除这个策略模板吗？')) {
+        const template = strategyTemplates[index];
+        try {
+            const response = await fetch(`/api/strategies/${template.name}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('删除策略失败');
+            }
+
+            // 如果删除的是当前激活的策略，清除激活状态
+            if (activeStrategyIndex === index) {
+                await fetch('/api/active-strategy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        strategyName: null
+                    })
+                });
+                activeStrategyIndex = null;
+            } else if (activeStrategyIndex > index) {
+                activeStrategyIndex--;
+            }
+
+            strategyTemplates.splice(index, 1);
+            refreshTemplateList();
+            showToast('策略已删除');
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+}
+
+
+
+
+
+
+
+
 
 // API测试相关函数
 async function runApiTest() {
@@ -137,16 +229,6 @@ async function deleteWallet(index, event) {
             alert(error.message);
         }
     }
-}
-
-// 策略相关函数
-function selectStrategy(index) {
-    activeStrategyIndex = index;
-    refreshTemplateList();
-
-    // 显示选中反馈
-    const template = strategyTemplates[index];
-    showToast(`已切换至策略: ${template.name}`);
 }
 
 function showToast(message) {
@@ -531,33 +613,6 @@ async function saveStrategyTemplate() {
     }
 }
 
-async function deleteTemplate(index, event) {
-    event.stopPropagation(); // 阻止事件冒泡
-
-    if (confirm('确定要删除这个策略模板吗？')) {
-        const template = strategyTemplates[index];
-        try {
-            const response = await fetch(`/api/strategies/${template.name}`, {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                throw new Error('删除策略失败');
-            }
-
-            strategyTemplates.splice(index, 1);
-            if (activeStrategyIndex === index) {
-                activeStrategyIndex = null;
-            } else if (activeStrategyIndex > index) {
-                activeStrategyIndex--;
-            }
-            refreshTemplateList();
-            showToast('策略已删除');
-        } catch (error) {
-            alert(error.message);
-        }
-    }
-}
 
 // 更新所有输入框的step属性
 function updateAllInputStepAttributes() {

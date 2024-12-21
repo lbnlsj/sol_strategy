@@ -13,6 +13,43 @@ DATA_DIR.mkdir(exist_ok=True)
 WALLETS_FILE = DATA_DIR / "wallets.json"
 STRATEGIES_FILE = DATA_DIR / "strategies.json"
 
+# 在app.py中添加新的配置文件路径
+ACTIVE_STRATEGY_FILE = DATA_DIR / "active_strategy.json"
+
+
+def get_active_strategy():
+    """获取当前激活的策略"""
+    if ACTIVE_STRATEGY_FILE.exists():
+        with open(ACTIVE_STRATEGY_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get('activeStrategy')
+    return None
+
+
+def save_active_strategy(strategy_name):
+    """保存当前激活的策略"""
+    with open(ACTIVE_STRATEGY_FILE, 'w') as f:
+        json.dump({'activeStrategy': strategy_name}, f)
+
+
+# 添加新的路由处理激活的策略
+@app.route('/api/active-strategy', methods=['GET'])
+def get_current_strategy():
+    """获取当前激活的策略"""
+    active_strategy = get_active_strategy()
+    return jsonify({'activeStrategy': active_strategy})
+
+
+@app.route('/api/active-strategy', methods=['POST'])
+def set_current_strategy():
+    """设置当前激活的策略"""
+    data = request.json
+    strategy_name = data.get('strategyName')
+    if strategy_name:
+        save_active_strategy(strategy_name)
+        return jsonify({'status': 'success', 'activeStrategy': strategy_name})
+    return jsonify({'error': 'No strategy name provided'}), 400
+
 
 def load_data(file_path):
     """加载JSON数据文件"""
