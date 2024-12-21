@@ -5,9 +5,31 @@ let editingTemplateIndex = null;
 let activeStrategyIndex = null;
 
 
+function refreshWalletList() {
+    const container = document.getElementById('walletList');
+    container.innerHTML = '';
 
+    wallets.forEach((wallet, index) => {
+        const div = document.createElement('div');
+        div.className = 'wallet-item'; // 使用新的wallet-item样式
+        div.innerHTML = `
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="font-semibold">${wallet.name}</h3>
+                    <p class="text-sm text-gray-500">${wallet.address}</p>
+                </div>
+                <button onclick="deleteWallet(${index}, event)" 
+                        class="text-red-500 hover:text-red-600 transition-colors duration-200">
+                    删除
+                </button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
 
-// 在main.js中添加以下代码
+    // 更新策略模板中的钱包选择
+    updateWalletSelection();
+}
 
 // 修改initializeData函数
 async function initializeData() {
@@ -105,13 +127,6 @@ async function deleteTemplate(index, event) {
         }
     }
 }
-
-
-
-
-
-
-
 
 
 // API测试相关函数
@@ -260,27 +275,6 @@ function duplicateTemplate(index, event) {
     showToast(`已复制策略: ${template.name}`);
 }
 
-function refreshWalletList() {
-    const container = document.getElementById('walletList');
-    container.innerHTML = '';
-
-    wallets.forEach((wallet, index) => {
-        const div = document.createElement('div');
-        div.className = 'border rounded-lg p-4';
-        div.innerHTML = `
-            <div class="flex justify-between items-center">
-                <div>
-                    <h3 class="font-semibold">${wallet.name} <span class="text-gray-500">(${wallet.address})</span></h3>
-                </div>
-                <button onclick="deleteWallet(${index}, event)" class="text-red-500 hover:text-red-600">删除</button>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-
-    // 更新策略模板中的钱包选择
-    updateWalletSelection();
-}
 
 function refreshTemplateList() {
     const container = document.getElementById('strategyTemplateList');
