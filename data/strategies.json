@@ -1,0 +1,71 @@
+[
+  {
+    "name": "\u5243\u5200",
+    "selectedWallets": [
+      "CU56FnfDJupdHTAauVeaV4UX4rEdo7KryXnmtmoBt4gR"
+    ],
+    "minBuyAmount": 0.3,
+    "maxBuyAmount": 0.5,
+    "speedMode": "normal",
+    "antiSqueeze": "off",
+    "buyPriority": 0.003,
+    "sellPriority": 0.003,
+    "stopPriority": 0.003,
+    "slippage": 0.25,
+    "trailingStop": 50,
+    "sellPercent": 100,
+    "stopLevels": []
+  },
+  {
+    "name": "\u6389\u7684",
+    "selectedWallets": [
+      "7JmSDcSYWpdHJCnQg8PiLTvpGNbkLs6o23qdKa8rWBet",
+      "GXA7JRD1PXYUag54RAsctrWTLoMWzU6PwHw9xfeDxPE2"
+    ],
+    "minBuyAmount": 0.3,
+    "maxBuyAmount": 0.5,
+    "speedMode": "normal",
+    "antiSqueeze": "off",
+    "buyPriority": 0.003,
+    "sellPriority": 0.003,
+    "stopPriority": 0.003,
+    "slippage": 0.25,
+    "trailingStop": 50,
+    "sellPercent": 100,
+    "stopLevels": []
+  },
+  {
+    "name": "1123",
+    "selectedWallets": [
+      "CU56FnfDJupdHTAauVeaV4UX4rEdo7KryXnmtmoBt4gR"
+    ],
+    "minBuyAmount": 0.3,
+    "maxBuyAmount": 0.5,
+    "speedMode": "normal",
+    "antiSqueeze": "off",
+    "buyPriority": 0.003,
+    "sellPriority": 0.003,
+    "stopPriority": 0.003,
+    "slippage": 0.25,
+    "trailingStop": 50,
+    "sellPercent": 100,
+    "stopLevels": []
+  },
+  {
+    "name": "345344",
+    "selectedWallets": [
+      "GXA7JRD1PXYUag54RAsctrWTLoMWzU6PwHw9xfeDxPE2"
+    ],
+    "minBuyAmount": 0.3,
+    "maxBuyAmount": 0.5,
+    "speedMode": "normal",
+    "antiSqueeze": "off",
+    "buyPriority": 0.003,
+    "sellPriority": 0.003,
+    "stopPriority": 0.003,
+    "slippage": 0.25,
+    "trailingStop": 50,
+    "sellPercent": 100,
+    "stopLevels": []
+  }
+]
