@@ -7,6 +7,136 @@ app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 
+# 修改 app.py 中的任务相关代码
+
+from flask import Flask, jsonify, request
+from datetime import datetime
+
+# 添加新的模拟数据存储
+mock_tasks = {}  # 存储运行中的任务
+task_counter = 0  # 用于生成任务ID
+
+# 在 app.py 中添加策略 ID 计数器
+strategy_id_counter = 0  # 用于生成策略ID
+
+
+# 修改策略保存/更新接口
+@app.route('/api/strategies', methods=['POST'])
+def add_strategy():
+    global strategy_id_counter
+    strategy_data = request.json
+
+    # 如果传入了strategy_id，说明是更新操作
+    strategy_id = strategy_data.get('id')
+
+    if strategy_id is not None:
+        # 更新现有策略
+        existing_strategy = next(
+            (s for s in mock_strategies if s["id"] == strategy_id),
+            None
+        )
+        if existing_strategy:
+            for i, strategy in enumerate(mock_strategies):
+                if strategy["id"] == strategy_id:
+                    # 保持原有ID
+                    strategy_data["id"] = strategy_id
+                    mock_strategies[i] = strategy_data
+                    return jsonify(strategy_data)
+            return jsonify({"error": "Strategy not found"}), 404
+    else:
+        # 添加新策略
+        strategy_id_counter += 1
+        strategy_data["id"] = strategy_id_counter
+        mock_strategies.append(strategy_data)
+
+    return jsonify(strategy_data)
+
+
+# 修改策略删除接口
+@app.route('/api/strategies/<int:strategy_id>', methods=['DELETE'])
+def delete_strategy(strategy_id):
+    global mock_strategies
+    original_length = len(mock_strategies)
+    mock_strategies = [s for s in mock_strategies if s["id"] != strategy_id]
+
+    if len(mock_strategies) == original_length:
+        return jsonify({"error": "Strategy not found"}), 404
+
+    return jsonify({"success": True})
+
+
+# 修改获取单个策略接口
+@app.route('/api/strategies/<int:strategy_id>', methods=['GET'])
+def get_strategy(strategy_id):
+    strategy = next(
+        (s for s in mock_strategies if s["id"] == strategy_id),
+        None
+    )
+    if strategy:
+        return jsonify(strategy)
+    return jsonify({"error": "Strategy not found"}), 404
+
+
+# 修改任务创建接口
+@app.route('/api/tasks', methods=['POST'])
+def create_task():
+    global task_counter
+    data = request.json
+    strategy_id = data.get("strategyId")
+
+    # 检查策略是否存在
+    strategy = next((s for s in mock_strategies if s["id"] == strategy_id), None)
+    if not strategy:
+        return jsonify({"error": "Strategy not found"}), 404
+
+    # 生成任务ID
+    task_counter += 1
+    task_id = str(task_counter)
+
+    # 创建新任务
+    task = {
+        "id": task_id,
+        "strategyId": strategy_id,
+        "strategyName": strategy["name"],  # 保存策略名称用于显示
+        "startTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "running"
+    }
+
+    mock_tasks[task_id] = task
+    return jsonify(task)
+
+
+# 任务管理相关接口
+@app.route('/api/tasks', methods=['GET'])
+def get_tasks():
+    # 返回所有运行中的任务
+    return jsonify([
+        {
+            "id": task_id,
+            "templateName": task["templateName"],
+            "startTime": task["startTime"],
+            "status": task["status"]
+        }
+        for task_id, task in mock_tasks.items()
+    ])
+
+
+@app.route('/api/tasks/<task_id>/stop', methods=['POST'])
+def stop_task(task_id):
+    if task_id in mock_tasks:
+        del mock_tasks[task_id]
+        return jsonify({"success": True})
+    return jsonify({"error": "Task not found"}), 404
+
+
+@app.route('/api/tasks/<task_id>', methods=['GET'])
+def get_task(task_id):
+    task = mock_tasks.get(task_id)
+    if task:
+        return jsonify(task)
+    return jsonify({"error": "Task not found"}), 404
+
+
 # 模拟数据存储
 mock_wallets = []
 mock_strategies = []
@@ -23,6 +153,8 @@ active_strategy = None
 
 # 模拟一些初始数据
 def init_mock_data():
+    global strategy_id_counter  # 确保可以更新全局计数器
+
     # 添加一些模拟钱包
     mock_wallets.extend([
         {
@@ -35,9 +167,23 @@ def init_mock_data():
         }
     ])
 
+    # 添加一些模拟类型
+    mock_types.extend([
+        {
+            "id": 1,
+            "name": "类型1"
+        },
+        {
+            "id": 2,
+            "name": "类型2"
+        }
+    ])
+
     # 添加一些模拟策略
+    strategy_id_counter += 1  # 增加计数器
     mock_strategies.extend([
         {
+            "id": strategy_id_counter,  # 使用计数器作为ID
             "name": "默认策略",
             "selectedWallets": ["HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH"],
             "minBuyAmount": 0.3,
@@ -54,8 +200,12 @@ def init_mock_data():
                 {"increase": 50, "sell": 50, "position": 50},
                 {"increase": 100, "sell": 100, "position": 100}
             ],
-            "selectedTypes": ["type1"],
+            "selectedTypes": [1],  # 使用类型ID而不是字符串
             "jitoSettings": {
+                "enabled": False,
+                "fee": 0.0001
+            },
+            "antiSandwichSettings": {
                 "enabled": False,
                 "fee": 0.0001
             }
@@ -105,33 +255,6 @@ def delete_wallet(address):
 @app.route('/api/strategies', methods=['GET'])
 def get_strategies():
     return jsonify(mock_strategies)
-
-
-@app.route('/api/strategies', methods=['POST'])
-def add_strategy():
-    strategy_data = request.json
-
-    # 检查是否是更新现有策略
-    existing_strategy_index = next(
-        (i for i, s in enumerate(mock_strategies) if s["name"] == strategy_data["name"]),
-        None
-    )
-
-    if existing_strategy_index is not None:
-        mock_strategies[existing_strategy_index] = strategy_data
-    else:
-        mock_strategies.append(strategy_data)
-
-    return jsonify(strategy_data)
-
-
-@app.route('/api/strategies/<name>', methods=['DELETE'])
-def delete_strategy(name):
-    global mock_strategies, active_strategy
-    mock_strategies = [s for s in mock_strategies if s["name"] != name]
-    if active_strategy == name:
-        active_strategy = None
-    return jsonify({"success": True})
 
 
 @app.route('/api/active-strategy', methods=['GET'])
@@ -219,39 +342,6 @@ def add_log():
     if len(mock_logs) > 1000:
         mock_logs.pop(0)
     return jsonify(log_entry)
-
-
-# Add these to app.py
-
-# Mock data for running tasks
-mock_tasks = {}
-
-
-@app.route('/api/tasks/<task_id>/stop', methods=['POST'])
-def stop_task(task_id):
-    if task_id in mock_tasks:
-        del mock_tasks[task_id]
-        return jsonify({"success": True})
-    return jsonify({"error": "Task not found"}), 404
-
-
-@app.route('/api/tasks', methods=['GET'])
-def get_tasks():
-    return jsonify(list(mock_tasks.values()))
-
-
-@app.route('/api/tasks', methods=['POST'])
-def create_task():
-    task_data = request.json
-    task_id = str(len(mock_tasks) + 1)
-    task = {
-        "id": task_id,
-        "contractAddress": task_data["contractAddress"],
-        "startTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "status": "running"
-    }
-    mock_tasks[task_id] = task
-    return jsonify(task)
 
 
 # 错误处理

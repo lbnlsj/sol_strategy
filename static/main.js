@@ -7,9 +7,308 @@ let activeStrategyIndex = null;
 
 
 
+// 在文件顶部添加任务状态跟踪变量
+let runningTasks = new Map(); // 用于跟踪运行中的任务 {templateName: taskId}
+
+
+
+
+
+
+
+
+// 修改保存策略模板函数
+async function saveStrategyTemplate() {
+    const selectedWallets = Array.from(document.querySelectorAll('.wallet-checkbox:checked'))
+        .map(checkbox => checkbox.value);
+
+    const selectedTypes = Array.from(document.querySelectorAll('.type-checkbox:checked'))
+        .map(checkbox => parseInt(checkbox.value));
+
+    if (selectedTypes.length === 0) {
+        showToast('请至少选择一个类型');
+        return;
+    }
+
+    const template = {
+        name: document.getElementById('templateName').value.trim(),
+        selectedWallets: selectedWallets,
+        selectedTypes: selectedTypes,
+        minBuyAmount: parseFloat(document.getElementById('templateMinBuyAmount').value),
+        maxBuyAmount: parseFloat(document.getElementById('templateMaxBuyAmount').value),
+        speedMode: document.getElementById('templateSpeedMode').value,
+        antiSqueeze: document.getElementById('templateAntiSqueeze').value,
+        buyPriority: parseFloat(document.getElementById('templateBuyPriority').value),
+        sellPriority: parseFloat(document.getElementById('templateSellPriority').value),
+        stopPriority: parseFloat(document.getElementById('templateStopPriority').value),
+        slippage: parseFloat(document.getElementById('templateSlippage').value),
+        trailingStop: parseFloat(document.getElementById('templateTrailingStop').value),
+        sellPercent: parseFloat(document.getElementById('templateSellPercent').value),
+        stopLevels: collectStopLevels(),
+        jitoSettings: {
+            enabled: document.getElementById('jitoEnabled').checked,
+            fee: parseFloat(document.getElementById('jitoFee').value)
+        },
+        antiSandwichSettings: {
+            enabled: document.getElementById('antiSandwichEnabled').checked,
+            fee: parseFloat(document.getElementById('antiSandwichFee').value)
+        }
+    };
+
+    if (!template.name) {
+        showToast('请填写模板名称');
+        return;
+    }
+
+    if (template.selectedWallets.length === 0) {
+        showToast('请至少选择一个钱包');
+        return;
+    }
+
+    try {
+        // 如果是编辑模式，添加策略ID
+        if (editingTemplateIndex !== null) {
+            template.id = strategyTemplates[editingTemplateIndex].id;
+        }
+
+        const response = await fetch('/api/strategies', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(template)
+        });
+
+        if (!response.ok) {
+            throw new Error('保存策略失败');
+        }
+
+        const savedStrategy = await response.json();
+
+        if (editingTemplateIndex !== null) {
+            // 更新现有策略
+            strategyTemplates[editingTemplateIndex] = savedStrategy;
+            showToast('策略更新成功');
+            addLog('INFO', `更新策略成功: ${template.name}`);
+        } else {
+            // 添加新策略
+            strategyTemplates.push(savedStrategy);
+            showToast('策略创建成功');
+            addLog('INFO', `创建策略成功: ${template.name}`);
+        }
+
+        refreshTemplateList();
+        closeStrategyModal();
+    } catch (error) {
+        showToast(error.message);
+        addLog('ERROR', `保存策略失败: ${error.message}`);
+    }
+}
+
+// 修改删除模板函数
+async function deleteTemplate(index, event) {
+    event.stopPropagation();
+
+    if (confirm('确定要删除这个策略模板吗？')) {
+        const template = strategyTemplates[index];
+        try {
+            // 如果任务正在运行，先停止任务
+            if (runningTasks.has(template.id)) {
+                const taskId = runningTasks.get(template.id);
+                await fetch(`/api/tasks/${taskId}/stop`, {
+                    method: 'POST'
+                });
+                runningTasks.delete(template.id);
+            }
+
+            const response = await fetch(`/api/strategies/${template.id}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('删除策略失败');
+            }
+
+            strategyTemplates.splice(index, 1);
+            refreshTemplateList();
+            showToast('策略已删除');
+            addLog('INFO', `删除策略: ${template.name}`);
+        } catch (error) {
+            showToast(error.message);
+            addLog('ERROR', `删除策略失败: ${error.message}`);
+        }
+    }
+}
+
+// 修改任务启停函数
+async function toggleTemplateStatus(templateId, index, event) {
+    event.stopPropagation();
+
+    try {
+        if (runningTasks.has(templateId)) {
+            // 停止任务
+            const taskId = runningTasks.get(templateId);
+            const response = await fetch(`/api/tasks/${taskId}/stop`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error('停止任务失败');
+            }
+
+            runningTasks.delete(templateId);
+            showToast('任务已停止');
+            addLog('INFO', `停止任务: ${strategyTemplates[index].name}`);
+        } else {
+            // 启动新任务
+            const response = await fetch('/api/tasks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    strategyId: templateId
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('启动任务失败');
+            }
+
+            const task = await response.json();
+            runningTasks.set(templateId, task.id);
+            showToast('任务已启动');
+            addLog('INFO', `启动任务: ${strategyTemplates[index].name}`);
+        }
+
+        refreshTemplateList();
+    } catch (error) {
+        showToast(error.message);
+        addLog('ERROR', error.message);
+    }
+}
+
+// 修改模板列表刷新函数
+function refreshTemplateList() {
+    const container = document.getElementById('strategyTemplateList');
+    container.innerHTML = '';
+
+    strategyTemplates.forEach((template, index) => {
+        const selectedWalletNames = template.selectedWallets
+            .map(addr => wallets.find(w => w.address === addr)?.name || '未知钱包')
+            .join(', ');
+
+        const selectedTypeInfo = template.selectedTypes
+            .map(typeId => {
+                const type = types.find(t => t.id === typeId);
+                return type ? `[${type.id}] ${type.name}` : '未知类型';
+            })
+            .join(', ');
+
+        const div = document.createElement('div');
+        div.className = 'strategy-card relative border rounded-lg p-4 hover:bg-gray-50';
+
+        // 检查任务是否正在运行
+        const isRunning = runningTasks.has(template.id);
+
+        const statusButton = `
+            <button 
+                onclick="toggleTemplateStatus(${template.id}, ${index}, event)" 
+                class="${isRunning ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} 
+                    text-white px-3 py-1 rounded text-sm transition-colors duration-200">
+                ${isRunning ? '停止' : '启动'}
+            </button>
+        `;
+
+        div.innerHTML = `
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">${template.name}</h3>
+                <div class="flex space-x-2">
+                    ${statusButton}
+                    <button onclick="showEditStrategyModal(${index}, event)" 
+                            class="text-blue-500 hover:text-blue-600">编辑</button>
+                    <button onclick="deleteTemplate(${index}, event)" 
+                            class="text-red-500 hover:text-red-600">删除</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                <div class="col-span-2">选中钱包: ${selectedWalletNames}</div>
+                <div class="col-span-2">选中类型: ${selectedTypeInfo}</div>
+                <div>买入金额范围: ${template.minBuyAmount} - ${template.maxBuyAmount} SOL</div>
+                <div>滑点: ${template.slippage}%</div>
+                <div>极速模式: ${template.speedMode === 'fast' ? '开启' : '关闭'}</div>
+                <div>防夹模式: ${template.antiSqueeze === 'on' ? '开启' : '关闭'}</div>
+                <div>买入优先费: ${template.buyPriority}</div>
+                <div>卖出优先费: ${template.sellPriority}</div>
+                <div>止损优先费: ${template.stopPriority}</div>
+                <div>移动止损: ${template.trailingStop}%</div>
+                <div>卖出比例: ${template.sellPercent}%</div>
+                <div>Jito费用: ${template.jitoSettings?.enabled ? template.jitoSettings.fee : '未启用'}</div>
+                <div>防夹费用: ${template.antiSandwichSettings?.enabled ? template.antiSandwichSettings.fee : '未启用'}</div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+
+
+
+
+
+// 在初始化函数中添加获取运行中任务的逻辑
+async function initializeData() {
+    try {
+        const [walletsResponse, typesResponse, strategiesResponse, tasksResponse] = await Promise.all([
+            fetch('/api/wallets'),
+            fetch('/api/types'),
+            fetch('/api/strategies'),
+            fetch('/api/tasks')
+        ]);
+
+        wallets = await walletsResponse.json();
+        types = await typesResponse.json();
+        strategyTemplates = await strategiesResponse.json();
+
+        // 初始化运行中的任务
+        const tasks = await tasksResponse.json();
+        runningTasks.clear();
+        tasks.forEach(task => {
+            if (task.templateName) {
+                runningTasks.set(task.templateName, task.id);
+            }
+        });
+
+        // 确保类型ID为数字
+        types = types.map(type => ({
+            ...type,
+            id: parseInt(type.id)
+        }));
+
+        // 确保策略中的类型ID为数字
+        strategyTemplates = strategyTemplates.map(strategy => ({
+            ...strategy,
+            selectedTypes: strategy.selectedTypes.map(id => parseInt(id))
+        }));
+
+        refreshWalletList();
+        refreshTypeList();
+        refreshTemplateList();
+        refreshLogs();
+        addLog('INFO', '系统初始化完成');
+    } catch (error) {
+        console.error('Error loading data:', error);
+        addLog('ERROR', `初始化失败: ${error.message}`);
+    }
+}
+
+
+
+
+
+
 // Add these variables at the top of main.js
 let selectedStrategies = new Set();
-let runningTasks = new Map();
 
 // Add these functions to main.js
 function toggleStrategySelection(index, event) {
@@ -78,68 +377,6 @@ async function stopTask(taskId) {
         addLog('ERROR', `停止任务失败: ${error.message}`);
     }
 }
-
-// Modify the refreshTemplateList function to include checkboxes
-function refreshTemplateList() {
-    const container = document.getElementById('strategyTemplateList');
-    container.innerHTML = '';
-
-    strategyTemplates.forEach((template, index) => {
-        const selectedWalletNames = template.selectedWallets
-            .map(addr => wallets.find(w => w.address === addr)?.name || '未知钱包')
-            .join(', ');
-
-        const selectedTypeInfo = template.selectedTypes
-            .map(typeId => {
-                const type = types.find(t => t.id === typeId);
-                return type ? `[${type.id}] ${type.name}` : '未知类型';
-            })
-            .join(', ');
-
-        const div = document.createElement('div');
-        div.className = `strategy-card relative border rounded-lg p-4 cursor-pointer hover:bg-gray-50 
-            ${index === activeStrategyIndex ? 'active' : ''} 
-            ${selectedStrategies.has(index) ? 'border-blue-500 ring-2 ring-blue-500' : ''}`;
-
-        const checkmark = `
-            <div class="absolute top-4 left-4">
-                <input type="checkbox" 
-                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    ${selectedStrategies.has(index) ? 'checked' : ''}
-                    onclick="toggleStrategySelection(${index}, event)">
-            </div>
-        `;
-
-        div.innerHTML = `
-            ${checkmark}
-            <div class="flex justify-end space-x-2 mb-2">
-                <button onclick="showManagementModal(${index}, event)" class="text-green-500 hover:text-green-600">管理</button>
-                <button onclick="showEditStrategyModal(${index}, event)" class="text-blue-500 hover:text-blue-600">编辑</button>
-                <button onclick="deleteTemplate(${index}, event)" class="text-red-500 hover:text-red-600">删除</button>
-            </div>
-            <div class="grid grid-cols-2 gap-4 text-sm text-gray-600 mt-6">
-                <div class="col-span-2">选中钱包: ${selectedWalletNames}</div>
-                <div class="col-span-2">选中类型: ${selectedTypeInfo}</div>
-                <div>买入金额范围: ${template.minBuyAmount} - ${template.maxBuyAmount} SOL</div>
-                <div>滑点: ${template.slippage}%</div>
-                <div>极速模式: ${template.speedMode === 'fast' ? '开启' : '关闭'}</div>
-                <div>防夹模式: ${template.antiSqueeze === 'on' ? '开启' : '关闭'}</div>
-                <div>买入优先费: ${template.buyPriority}</div>
-                <div>卖出优先费: ${template.sellPriority}</div>
-                <div>止损优先费: ${template.stopPriority}</div>
-                <div>移动止损: ${template.trailingStop}%</div>
-                <div>卖出比例: ${template.sellPercent}%</div>
-                <div>Jito费用: ${template.jitoSettings?.enabled ? template.jitoSettings.fee : '未启用'}</div>
-                <div>防夹费用: ${template.antiSandwichSettings?.enabled ? template.antiSandwichSettings.fee : '未启用'}</div>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-
-
-
 
 
 // Add these management functions
@@ -222,8 +459,6 @@ async function createNewTask() {
 }
 
 // Add these variables at the top of main.js
-
-
 
 
 // 设置相关函数
@@ -513,7 +748,7 @@ function updateTypeSelection() {
                 value="${type.id}"
                 class="type-checkbox"
                 ${editingTemplateIndex !== null &&
-                    strategyTemplates[editingTemplateIndex].selectedTypes.includes(type.id) ? 'checked' : ''}>
+    strategyTemplates[editingTemplateIndex].selectedTypes.includes(type.id) ? 'checked' : ''}>
             <label for="type-${type.id}" class="text-sm">
                 <span class="font-medium text-blue-600">ID: ${type.id}</span>
                 <span class="text-gray-400 mx-1">|</span>
@@ -534,7 +769,7 @@ function updateWalletSelection() {
                 value="${wallet.address}"
                 class="wallet-checkbox"
                 ${editingTemplateIndex !== null &&
-                    strategyTemplates[editingTemplateIndex].selectedWallets.includes(wallet.address) ? 'checked' : ''}>
+    strategyTemplates[editingTemplateIndex].selectedWallets.includes(wallet.address) ? 'checked' : ''}>
             <label for="wallet-${wallet.address}" class="text-sm">
                 ${wallet.name} <span class="text-gray-500">(${wallet.address})</span>
             </label>
@@ -601,85 +836,6 @@ function fillModalWithTemplate(template) {
     }
 }
 
-async function saveStrategyTemplate() {
-    const selectedWallets = Array.from(document.querySelectorAll('.wallet-checkbox:checked'))
-        .map(checkbox => checkbox.value);
-
-    const selectedTypes = Array.from(document.querySelectorAll('.type-checkbox:checked'))
-        .map(checkbox => parseInt(checkbox.value));
-
-    if (selectedTypes.length === 0) {
-        alert('请至少选择一个类型');
-        return;
-    }
-
-    const template = {
-        name: document.getElementById('templateName').value,
-        selectedWallets: selectedWallets,
-        selectedTypes: selectedTypes,
-        minBuyAmount: parseFloat(document.getElementById('templateMinBuyAmount').value),
-        maxBuyAmount: parseFloat(document.getElementById('templateMaxBuyAmount').value),
-        speedMode: document.getElementById('templateSpeedMode').value,
-        antiSqueeze: document.getElementById('templateAntiSqueeze').value,
-        buyPriority: parseFloat(document.getElementById('templateBuyPriority').value),
-        sellPriority: parseFloat(document.getElementById('templateSellPriority').value),
-        stopPriority: parseFloat(document.getElementById('templateStopPriority').value),
-        slippage: parseFloat(document.getElementById('templateSlippage').value),
-        trailingStop: parseFloat(document.getElementById('templateTrailingStop').value),
-        sellPercent: parseFloat(document.getElementById('templateSellPercent').value),
-        stopLevels: collectStopLevels(),
-        jitoSettings: {
-            enabled: document.getElementById('jitoEnabled').checked,
-            fee: parseFloat(document.getElementById('jitoFee').value)
-        },
-        antiSandwichSettings: {
-            enabled: document.getElementById('antiSandwichEnabled').checked,
-            fee: parseFloat(document.getElementById('antiSandwichFee').value)
-        }
-    };
-
-    if (!template.name) {
-        alert('请填写模板名称');
-        return;
-    }
-
-    if (template.selectedWallets.length === 0) {
-        alert('请至少选择一个钱包');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/strategies', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(template)
-        });
-
-        if (!response.ok) {
-            throw new Error('保存策略失败');
-        }
-
-        const savedStrategy = await response.json();
-
-        if (editingTemplateIndex !== null) {
-            strategyTemplates[editingTemplateIndex] = savedStrategy;
-            showToast('策略更新成功');
-            addLog('INFO', `更新策略成功: ${template.name}`);
-        } else {
-            strategyTemplates.push(savedStrategy);
-            showToast('策略创建成功');
-            addLog('INFO', `创建策略成功: ${template.name}`);
-        }
-
-        refreshTemplateList();
-        closeStrategyModal();
-    } catch (error) {
-        alert(error.message);
-        addLog('ERROR', `保存策略失败: ${error.message}`);
-    }
-}
 
 function showNewStrategyModal() {
     editingTemplateIndex = null;
@@ -736,46 +892,6 @@ async function selectStrategy(index) {
         console.error('Error selecting strategy:', error);
         showToast('切换策略失败');
         addLog('ERROR', `切换策略失败: ${error.message}`);
-    }
-}
-
-async function deleteTemplate(index, event) {
-    event.stopPropagation();
-
-    if (confirm('确定要删除这个策略模板吗？')) {
-        const template = strategyTemplates[index];
-        try {
-            const response = await fetch(`/api/strategies/${template.name}`, {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                throw new Error('删除策略失败');
-            }
-
-            if (activeStrategyIndex === index) {
-                await fetch('/api/active-strategy', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        strategyName: null
-                    })
-                });
-                activeStrategyIndex = null;
-            } else if (activeStrategyIndex > index) {
-                activeStrategyIndex--;
-            }
-
-            strategyTemplates.splice(index, 1);
-            refreshTemplateList();
-            showToast('策略已删除');
-            addLog('INFO', `删除策略: ${template.name}`);
-        } catch (error) {
-            alert(error.message);
-            addLog('ERROR', `删除策略失败: ${error.message}`);
-        }
     }
 }
 
@@ -898,7 +1014,7 @@ let logQueue = [];
 let isLogging = false;
 
 async function addLog(level, message) {
-    logQueue.push({ level, message });
+    logQueue.push({level, message});
     if (!isLogging) {
         await processLogQueue();
     }
@@ -911,7 +1027,7 @@ async function processLogQueue() {
     }
 
     isLogging = true;
-    const { level, message } = logQueue.shift();
+    const {level, message} = logQueue.shift();
 
     try {
         const response = await fetch('/api/logs', {
@@ -1003,51 +1119,6 @@ function showToast(message) {
     }, 2000);
 }
 
-// 初始化
-async function initializeData() {
-    try {
-        const [walletsResponse, typesResponse, strategiesResponse, activeStrategyResponse] = await Promise.all([
-            fetch('/api/wallets'),
-            fetch('/api/types'),
-            fetch('/api/strategies'),
-            fetch('/api/active-strategy')
-        ]);
-
-        wallets = await walletsResponse.json();
-        types = await typesResponse.json();
-        // 确保类型ID为数字
-        types = types.map(type => ({
-            ...type,
-            id: parseInt(type.id)
-        }));
-
-        strategyTemplates = await strategiesResponse.json();
-        // 确保策略中的类型ID为数字
-        strategyTemplates = strategyTemplates.map(strategy => ({
-            ...strategy,
-            selectedTypes: strategy.selectedTypes.map(id => parseInt(id))
-        }));
-
-        const activeStrategyData = await activeStrategyResponse.json();
-        if (activeStrategyData.activeStrategy) {
-            const activeIndex = strategyTemplates.findIndex(
-                template => template.name === activeStrategyData.activeStrategy
-            );
-            if (activeIndex !== -1) {
-                activeStrategyIndex = activeIndex;
-            }
-        }
-
-        refreshWalletList();
-        refreshTypeList();
-        refreshTemplateList();
-        refreshLogs();
-        addLog('INFO', '系统初始化完成');
-    } catch (error) {
-        console.error('Error loading data:', error);
-        addLog('ERROR', `初始化失败: ${error.message}`);
-    }
-}
 
 // 页面加载初始化
 document.addEventListener('DOMContentLoaded', () => {
