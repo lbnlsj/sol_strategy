@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <style>
-        /* 基础滚动容器样式 */
+        /* 保持原有样式不变 */
         .scrollable-container {
             max-height: calc(100vh - 400px);
             min-height: 200px;
@@ -102,101 +102,102 @@
             }
         }
 
+        /* 通用滚动容器样式 */
+        .scrollable-container {
+            max-height: calc(100vh - 400px);
+            min-height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
+        }
 
-            /* 通用滚动容器样式 */
-    .scrollable-container {
-        max-height: calc(100vh - 400px);
-        min-height: 200px;
-        overflow-y: auto;
-        overflow-x: hidden;
-        scrollbar-width: thin;
-        scrollbar-color: #888 #f1f1f1;
-    }
+        /* 钱包列表特定的滚动容器样式 */
+        .wallet-list-container {
+            max-height: 300px;
+            min-height: 150px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: #888 #f1f1f1;
+        }
 
-    /* 钱包列表特定的滚动容器样式 */
-    .wallet-list-container {
-        max-height: 300px; /* 设置较小的固定最大高度 */
-        min-height: 150px; /* 设置最小高度 */
-        overflow-y: auto;
-        overflow-x: hidden;
-        scrollbar-width: thin;
-        scrollbar-color: #888 #f1f1f1;
-    }
+        /* 滚动条样式 */
+        .wallet-list-container::-webkit-scrollbar {
+            width: 6px;
+        }
 
-    /* 滚动条样式 */
-    .wallet-list-container::-webkit-scrollbar {
-        width: 6px;
-    }
+        .wallet-list-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
 
-    .wallet-list-container::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 3px;
-    }
+        .wallet-list-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
 
-    .wallet-list-container::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 3px;
-    }
+        .wallet-list-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
 
-    .wallet-list-container::-webkit-scrollbar-thumb:hover {
-        background: #555;
-    }
+        /* 钱包列表项样式 */
+        .wallet-item {
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            background-color: white;
+        }
 
-    /* 钱包列表项样式 */
-    .wallet-item {
-        padding: 1rem;
-        border: 1px solid #e5e7eb;
-        border-radius: 0.5rem;
-        margin-bottom: 0.5rem;
-        background-color: white;
-    }
+        .wallet-item:hover {
+            background-color: #f9fafb;
+        }
 
-    .wallet-item:hover {
-        background-color: #f9fafb;
-    }
-
+        /* 新增: 数据类型容器样式 */
+        .data-types-container {
+            max-height: 200px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
 <div class="container mx-auto px-4 py-8">
-    <!-- API测试模块 -->
-    <div class="bg-white rounded-lg shadow p-6 mb-8">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-semibold">API 测试</h2>
-            <button onclick="runApiTest()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                运行测试
-            </button>
-        </div>
-        <div>
-            <div class="space-y-2">
-                <label class="block text-sm font-medium text-gray-700">Solana 地址</label>
-                <input type="text" id="apiTestAddress" class="w-full px-3 py-2 border rounded-md"
-                       placeholder="输入Solana地址">
-            </div>
-            <div class="mt-4">
-                <div id="apiTestResult" class="text-sm"></div>
-            </div>
-        </div>
-    </div>
-
-<div class="bg-white rounded-lg shadow p-6 mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-semibold">钱包管理</h2>
-        <button onclick="showWalletModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            添加钱包
+    <!-- 顶部导航栏 -->
+    <div class="bg-white rounded-lg shadow p-4 mb-8 flex justify-between items-center">
+        <h1 class="text-xl font-bold">Solana 交易机器人</h1>
+        <button onclick="showSettingsModal()"
+                class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            设置
         </button>
     </div>
-    <div id="walletList" class="wallet-list-container pr-2">
-        <!-- 钱包列表将在这里动态生成 -->
+
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">钱包管理</h2>
+            <button onclick="showWalletModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                添加钱包
+            </button>
+        </div>
+        <div id="walletList" class="wallet-list-container pr-2">
+            <!-- 钱包列表将在这里动态生成 -->
+        </div>
     </div>
-</div>
 
     <!-- 策略模板管理面板 -->
     <div class="bg-white rounded-lg shadow p-6">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-semibold">策略模板</h2>
-            <button onclick="showNewStrategyModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                新建策略
+            <h2 class="text-xl font-semibold">交易管理</h2>
+            <button onclick="showNewStrategyModal()"
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                新建交易
             </button>
         </div>
         <div id="strategyTemplateList"
@@ -238,10 +239,59 @@
     </div>
 </div>
 
+<!-- 设置模态框 -->
+<div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 w-[500px] modal-content">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold">系统设置</h3>
+            <button onclick="closeSettingsModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="space-y-4">
+            <!-- RPC 设置 -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">Solana RPC URL</label>
+                <input type="text" id="settingsRpcUrl" class="w-full px-3 py-2 border rounded-md"
+                       placeholder="https://api.mainnet-beta.solana.com">
+            </div>
+
+            <!-- Jito RPC 设置 -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">Jito RPC URL</label>
+                <input type="text" id="settingsJitoRpcUrl" class="w-full px-3 py-2 border rounded-md"
+                       placeholder="https://jito-api.mainnet-beta.solana.com">
+            </div>
+
+            <!-- WebSocket 设置 -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">WebSocket URL</label>
+                <input type="text" id="settingsWsUrl" class="w-full px-3 py-2 border rounded-md"
+                       placeholder="wss://api.mainnet-beta.solana.com">
+            </div>
+
+            <!-- WebSocket 端口设置 -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">WebSocket 端口</label>
+                <input type="number" id="settingsWsPort" class="w-full px-3 py-2 border rounded-md"
+                       placeholder="8900">
+            </div>
+        </div>
+        <div class="flex justify-end space-x-3 mt-6">
+            <button onclick="closeSettingsModal()" class="px-4 py-2 border rounded-md hover:bg-gray-100">取消</button>
+            <button onclick="saveSettings()" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                保存
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- 策略模板编辑弹窗 -->
-<div id="strategyModal"
-     class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center overflow-y-auto">
-    <div class="bg-white rounded-lg p-6 w-[500px] my-8 modal-content">
+    <div id="strategyModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center overflow-y-auto">
+        <div class="bg-white rounded-lg p-6 w-[500px] my-8 modal-content">
+
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-xl font-semibold" id="modalTitle">策略模板</h3>
             <button onclick="closeStrategyModal()" class="text-gray-500 hover:text-gray-700">
@@ -261,6 +311,66 @@
                 <label class="block text-sm font-medium text-gray-700">选择钱包</label>
                 <div id="walletSelection" class="scrollable-container max-h-40 border rounded-md p-2">
                     <!-- 钱包选择列表将通过 JavaScript 动态填充 -->
+                </div>
+            </div>
+
+            <!-- 数据类型选择 -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">数据类型</label>
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <input type="checkbox" id="dataType1" class="data-type-checkbox">
+                            <input type="text" id="dataType1Text"
+                                   class="flex-1 ml-2 px-3 py-2 border rounded-md text-sm"
+                                   placeholder="类型1" value="类型1">
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <input type="checkbox" id="dataType2" class="data-type-checkbox">
+                            <input type="text" id="dataType2Text"
+                                   class="flex-1 ml-2 px-3 py-2 border rounded-md text-sm"
+                                   placeholder="类型2" value="类型2">
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <input type="checkbox" id="dataType3" class="data-type-checkbox">
+                            <input type="text" id="dataType3Text"
+                                   class="flex-1 ml-2 px-3 py-2 border rounded-md text-sm"
+                                   placeholder="类型3" value="类型3">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 修改Jito费用部分，添加防夹费用设置 -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Jito费用设置 -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-sm font-medium text-gray-700">Jito费用</label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="jitoEnabled" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+                    <input type="number" id="jitoFee" class="w-full px-3 py-2 border rounded-md"
+                           value="0.0001" step="0.0001" min="0">
+                </div>
+
+                <!-- 防夹费用设置 -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-sm font-medium text-gray-700">防夹费用</label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="antiSandwichEnabled" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+                    <input type="number" id="antiSandwichFee" class="w-full px-3 py-2 border rounded-md"
+                           value="0.0001" step="0.0001" min="0">
                 </div>
             </div>
 
@@ -318,8 +428,11 @@
             <!-- 其他设置 -->
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700">滑点</label>
-                <input type="number" id="templateSlippage" class="w-full px-3 py-2 border rounded-md" value="0.25"
-                       step="0.01">
+                <div class="flex">
+                    <input type="number" id="templateSlippage" class="w-full px-3 py-2 border rounded-md" value="0.25"
+                           step="0.01">
+                    <span class="px-3 py-2 bg-gray-100 border-t border-r border-b rounded-r-md">%</span>
+                </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">

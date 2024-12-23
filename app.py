@@ -3,6 +3,7 @@ import json
 from solders.keypair import Keypair
 from pathlib import Path
 import os
+from utilities.webhook_handler import WebhookExecutor
 
 app = Flask(__name__)
 
@@ -12,9 +13,19 @@ DATA_DIR.mkdir(exist_ok=True)
 
 WALLETS_FILE = DATA_DIR / "wallets.json"
 STRATEGIES_FILE = DATA_DIR / "strategies.json"
-
-# 在app.py中添加新的配置文件路径
 ACTIVE_STRATEGY_FILE = DATA_DIR / "active_strategy.json"
+SETTINGS_FILE = DATA_DIR / "settings.json"
+
+# 默认设置
+DEFAULT_SETTINGS = {
+    "rpcUrl": "https://api.mainnet-beta.solana.com",
+    "jitoRpcUrl": "https://jito-api.mainnet-beta.solana.com",
+    "wsUrl": "wss://api.mainnet-beta.solana.com",
+    "wsPort": 8900
+}
+
+# 初始化WebhookExecutor
+webhook_executor = WebhookExecutor(DATA_DIR)
 
 
 def get_active_strategy():
@@ -30,6 +41,20 @@ def save_active_strategy(strategy_name):
     """保存当前激活的策略"""
     with open(ACTIVE_STRATEGY_FILE, 'w') as f:
         json.dump({'activeStrategy': strategy_name}, f)
+
+
+def load_data(file_path):
+    """加载JSON数据文件"""
+    if file_path.exists():
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    return []
+
+
+def save_data(data, file_path):
+    """保存数据到JSON文件"""
+    with open(file_path, 'w') as f:
+        json.dump(data, f, indent=2)
 
 
 # 添加新的路由处理激活的策略
@@ -49,20 +74,6 @@ def set_current_strategy():
         save_active_strategy(strategy_name)
         return jsonify({'status': 'success', 'activeStrategy': strategy_name})
     return jsonify({'error': 'No strategy name provided'}), 400
-
-
-def load_data(file_path):
-    """加载JSON数据文件"""
-    if file_path.exists():
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    return []
-
-
-def save_data(data, file_path):
-    """保存数据到JSON文件"""
-    with open(file_path, 'w') as f:
-        json.dump(data, f, indent=2)
 
 
 # 路由定义
@@ -168,6 +179,60 @@ def delete_strategy(name):
     strategies = [s for s in strategies if s['name'] != name]
     save_data(strategies, STRATEGIES_FILE)
     return jsonify({"status": "success"})
+
+
+# 修改webhook端点
+@app.route('/api/create_task', methods=['POST'])
+def handle_webhook():
+    """处理webhook请求"""
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    ca_address = data.get('ca_address')
+    if not ca_address:
+        return jsonify({"error": "No CA address provided"}), 400
+
+    # 验证CA地址格式
+    if not ca_address.strip():
+        return jsonify({"error": "Invalid CA address"}), 400
+
+    try:
+        # 执行交易策略
+        result, status_code = webhook_executor.execute_trade(ca_address)
+        return jsonify(result), status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# 修改状态检查端点
+@app.route('/api/status/<task_id>', methods=['GET'])
+def check_status(task_id):
+    """检查特定任务的状态"""
+    task_status = webhook_executor.get_task_status(task_id)
+    if task_status:
+        return jsonify(task_status)
+    return jsonify({
+        "error": "Task not found"
+    }), 404
+
+
+# 添加获取CA地址所有任务的端点
+@app.route('/api/tasks/<ca_address>', methods=['GET'])
+def get_ca_tasks(ca_address):
+    """获取特定CA地址的所有任务"""
+    # 遍历任务目录获取所有日志文件
+    tasks = []
+    for log_file in webhook_executor.logs_dir.glob("*.json"):
+        with open(log_file, 'r') as f:
+            task_data = json.load(f)
+            if task_data.get('ca_address') == ca_address:
+                tasks.append(task_data)
+
+    return jsonify({
+        "ca_address": ca_address,
+        "tasks": sorted(tasks, key=lambda x: x.get('start_time', ''), reverse=True)
+    })
 
 
 if __name__ == '__main__':
