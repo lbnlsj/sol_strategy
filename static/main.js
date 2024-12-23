@@ -1,8 +1,227 @@
-// 存储策略模板和钱包的数组
+// 全局变量
 let strategyTemplates = [];
 let wallets = [];
+let types = [];
 let editingTemplateIndex = null;
 let activeStrategyIndex = null;
+
+
+
+// Add these variables at the top of main.js
+let selectedStrategies = new Set();
+let runningTasks = new Map();
+
+// Add these functions to main.js
+function toggleStrategySelection(index, event) {
+    event.stopPropagation();
+    if (selectedStrategies.has(index)) {
+        selectedStrategies.delete(index);
+    } else {
+        selectedStrategies.add(index);
+    }
+
+    const manageBtn = document.getElementById('manageSelectedBtn');
+    manageBtn.classList.toggle('hidden', selectedStrategies.size === 0);
+
+    refreshTemplateList();
+}
+
+function manageSelectedStrategies() {
+    document.getElementById('managementModal').classList.remove('hidden');
+    refreshTasksList();
+}
+
+function closeManagementModal() {
+    document.getElementById('managementModal').classList.add('hidden');
+}
+
+function refreshTasksList() {
+    const tasksList = document.getElementById('tasksList');
+    tasksList.innerHTML = '';
+
+    runningTasks.forEach((task, taskId) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${task.id}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${task.contractAddress}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${task.startTime}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                    运行中
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button onclick="stopTask('${taskId}')" 
+                        class="text-red-600 hover:text-red-900">停止</button>
+            </td>
+        `;
+        tasksList.appendChild(row);
+    });
+}
+
+async function stopTask(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/stop`, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            throw new Error('停止任务失败');
+        }
+
+        runningTasks.delete(taskId);
+        refreshTasksList();
+        showToast('任务已停止');
+        addLog('INFO', `停止任务: ${taskId}`);
+    } catch (error) {
+        showToast('停止任务失败');
+        addLog('ERROR', `停止任务失败: ${error.message}`);
+    }
+}
+
+// Modify the refreshTemplateList function to include checkboxes
+function refreshTemplateList() {
+    const container = document.getElementById('strategyTemplateList');
+    container.innerHTML = '';
+
+    strategyTemplates.forEach((template, index) => {
+        const selectedWalletNames = template.selectedWallets
+            .map(addr => wallets.find(w => w.address === addr)?.name || '未知钱包')
+            .join(', ');
+
+        const selectedTypeInfo = template.selectedTypes
+            .map(typeId => {
+                const type = types.find(t => t.id === typeId);
+                return type ? `[${type.id}] ${type.name}` : '未知类型';
+            })
+            .join(', ');
+
+        const div = document.createElement('div');
+        div.className = `strategy-card relative border rounded-lg p-4 cursor-pointer hover:bg-gray-50 
+            ${index === activeStrategyIndex ? 'active' : ''} 
+            ${selectedStrategies.has(index) ? 'border-blue-500 ring-2 ring-blue-500' : ''}`;
+
+        const checkmark = `
+            <div class="absolute top-4 left-4">
+                <input type="checkbox" 
+                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    ${selectedStrategies.has(index) ? 'checked' : ''}
+                    onclick="toggleStrategySelection(${index}, event)">
+            </div>
+        `;
+
+        div.innerHTML = `
+            ${checkmark}
+            <div class="flex justify-end space-x-2 mb-2">
+                <button onclick="showManagementModal(${index}, event)" class="text-green-500 hover:text-green-600">管理</button>
+                <button onclick="showEditStrategyModal(${index}, event)" class="text-blue-500 hover:text-blue-600">编辑</button>
+                <button onclick="deleteTemplate(${index}, event)" class="text-red-500 hover:text-red-600">删除</button>
+            </div>
+            <div class="grid grid-cols-2 gap-4 text-sm text-gray-600 mt-6">
+                <div class="col-span-2">选中钱包: ${selectedWalletNames}</div>
+                <div class="col-span-2">选中类型: ${selectedTypeInfo}</div>
+                <div>买入金额范围: ${template.minBuyAmount} - ${template.maxBuyAmount} SOL</div>
+                <div>滑点: ${template.slippage}%</div>
+                <div>极速模式: ${template.speedMode === 'fast' ? '开启' : '关闭'}</div>
+                <div>防夹模式: ${template.antiSqueeze === 'on' ? '开启' : '关闭'}</div>
+                <div>买入优先费: ${template.buyPriority}</div>
+                <div>卖出优先费: ${template.sellPriority}</div>
+                <div>止损优先费: ${template.stopPriority}</div>
+                <div>移动止损: ${template.trailingStop}%</div>
+                <div>卖出比例: ${template.sellPercent}%</div>
+                <div>Jito费用: ${template.jitoSettings?.enabled ? template.jitoSettings.fee : '未启用'}</div>
+                <div>防夹费用: ${template.antiSandwichSettings?.enabled ? template.antiSandwichSettings.fee : '未启用'}</div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+
+
+
+
+
+// Add these management functions
+function showManagementModal(index, event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    document.getElementById('managementModal').classList.remove('hidden');
+
+    // 创建任务的处理函数
+    const modalContainer = document.getElementById('managementModal');
+    const tasksList = modalContainer.querySelector('#tasksList');
+
+    // 清空当前任务列表
+    tasksList.innerHTML = '';
+
+    // 添加创建任务的表单行
+    const newTaskRow = document.createElement('tr');
+    newTaskRow.innerHTML = `
+        <td class="px-6 py-4 whitespace-nowrap">新任务</td>
+        <td class="px-6 py-4 whitespace-nowrap">
+            <input type="text" 
+                id="newTaskContract" 
+                class="w-full px-3 py-1 border rounded" 
+                placeholder="输入合约地址">
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">-</td>
+        <td class="px-6 py-4 whitespace-nowrap">-</td>
+        <td class="px-6 py-4 whitespace-nowrap text-right">
+            <button onclick="createNewTask()"
+                    class="text-green-600 hover:text-green-900">
+                创建
+            </button>
+        </td>
+    `;
+    tasksList.appendChild(newTaskRow);
+
+    // 添加现有任务列表
+    refreshTasksList();
+}
+
+async function createNewTask() {
+    const contractAddress = document.getElementById('newTaskContract').value;
+    if (!contractAddress) {
+        showToast('请输入合约地址');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/tasks', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contractAddress: contractAddress
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('创建任务失败');
+        }
+
+        const task = await response.json();
+        runningTasks.set(task.id, task);
+
+        // 清空输入框
+        document.getElementById('newTaskContract').value = '';
+
+        // 刷新任务列表
+        refreshTasksList();
+
+        showToast('任务创建成功');
+        addLog('INFO', `创建任务成功: ${contractAddress}`);
+
+    } catch (error) {
+        showToast('创建任务失败');
+        addLog('ERROR', `创建任务失败: ${error.message}`);
+    }
+}
+
+// Add these variables at the top of main.js
 
 
 
@@ -25,7 +244,6 @@ async function loadSettings() {
         }
         const settings = await response.json();
 
-        // 填充设置表单
         document.getElementById('settingsRpcUrl').value = settings.rpcUrl || '';
         document.getElementById('settingsJitoRpcUrl').value = settings.jitoRpcUrl || '';
         document.getElementById('settingsWsUrl').value = settings.wsUrl || '';
@@ -33,6 +251,7 @@ async function loadSettings() {
     } catch (error) {
         console.error('Error loading settings:', error);
         showToast('加载设置失败');
+        addLog('ERROR', '加载设置失败');
     }
 }
 
@@ -59,19 +278,271 @@ async function saveSettings() {
 
         closeSettingsModal();
         showToast('设置保存成功');
+        addLog('INFO', '保存设置成功');
     } catch (error) {
         console.error('Error saving settings:', error);
         showToast('保存设置失败');
+        addLog('ERROR', '保存设置失败');
     }
 }
 
+// 钱包管理功能
+function showWalletModal() {
+    document.getElementById('walletModal').classList.remove('hidden');
+}
 
+function closeWalletModal() {
+    document.getElementById('walletModal').classList.add('hidden');
+    document.getElementById('walletName').value = '';
+    document.getElementById('walletPrivateKey').value = '';
+}
 
+async function addWallet() {
+    const name = document.getElementById('walletName').value;
+    let privateKey = document.getElementById('walletPrivateKey').value.trim();
 
+    if (!name || !privateKey) {
+        alert('请填写钱包名称和私钥');
+        return;
+    }
 
+    try {
+        const response = await fetch('/api/wallets', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name: name,
+                privateKey: privateKey
+            })
+        });
 
+        if (!response.ok) {
+            throw new Error('添加钱包失败');
+        }
 
+        const wallet = await response.json();
+        wallets.push(wallet);
+        refreshWalletList();
+        closeWalletModal();
+        showToast('钱包添加成功');
+        addLog('INFO', `添加钱包成功: ${name}`);
+    } catch (error) {
+        alert(error.message);
+        addLog('ERROR', `添加钱包失败: ${error.message}`);
+    }
+}
 
+async function deleteWallet(index, event) {
+    event.stopPropagation();
+
+    if (confirm('确定要删除这个钱包吗？')) {
+        const wallet = wallets[index];
+        try {
+            const response = await fetch(`/api/wallets/${wallet.address}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('删除钱包失败');
+            }
+
+            wallets.splice(index, 1);
+            refreshWalletList();
+            refreshTemplateList();
+            showToast('钱包已删除');
+            addLog('INFO', `删除钱包成功: ${wallet.name}`);
+        } catch (error) {
+            alert(error.message);
+            addLog('ERROR', `删除钱包失败: ${error.message}`);
+        }
+    }
+}
+
+function refreshWalletList() {
+    const container = document.getElementById('walletList');
+    container.innerHTML = '';
+
+    wallets.forEach((wallet, index) => {
+        const div = document.createElement('div');
+        div.className = 'wallet-item';
+        div.innerHTML = `
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="font-semibold">${wallet.name}</h3>
+                    <p class="text-sm text-gray-500">${wallet.address.substring(0, 8)}...${wallet.address.substring(36)}</p>
+                </div>
+                <button onclick="deleteWallet(${index}, event)" 
+                        class="text-red-500 hover:text-red-600 transition-colors duration-200">
+                    删除
+                </button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    updateWalletSelection();
+}
+
+// 类型管理功能
+function showTypeModal() {
+    document.getElementById('typeModal').classList.remove('hidden');
+}
+
+function closeTypeModal() {
+    document.getElementById('typeModal').classList.add('hidden');
+    document.getElementById('typeId').value = '';
+    document.getElementById('typeName').value = '';
+}
+
+async function addType() {
+    const typeId = document.getElementById('typeId').value;
+    const name = document.getElementById('typeName').value;
+
+    if (!typeId || !name) {
+        alert('请填写类型ID和类型备注');
+        return;
+    }
+
+    // 验证ID是否为整数
+    if (!Number.isInteger(Number(typeId)) || Number(typeId) <= 0) {
+        alert('类型ID必须为正整数');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/types', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                id: parseInt(typeId),
+                name: name
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '添加类型失败');
+        }
+
+        const type = await response.json();
+        types.push(type);
+        refreshTypeList();
+        closeTypeModal();
+        showToast('类型添加成功');
+        addLog('INFO', `添加类型成功: ID=${typeId}, 备注=${name}`);
+    } catch (error) {
+        alert(error.message);
+        addLog('ERROR', `添加类型失败: ${error.message}`);
+    }
+}
+
+async function deleteType(typeId, event) {
+    event.stopPropagation();
+
+    if (confirm('确定要删除这个类型吗？')) {
+        try {
+            const response = await fetch(`/api/types/${typeId}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('删除类型失败');
+            }
+
+            types = types.filter(t => t.id !== typeId);
+
+            strategyTemplates.forEach(strategy => {
+                strategy.selectedTypes = strategy.selectedTypes.filter(id => id !== typeId);
+            });
+
+            refreshTypeList();
+            refreshTemplateList();
+            showToast('类型已删除');
+            addLog('INFO', `删除类型成功: ID=${typeId}`);
+        } catch (error) {
+            alert(error.message);
+            addLog('ERROR', `删除类型失败: ${error.message}`);
+        }
+    }
+}
+
+function refreshTypeList() {
+    const container = document.getElementById('typeList');
+    container.innerHTML = '';
+
+    const sortedTypes = [...types].sort((a, b) => a.id - b.id);
+
+    sortedTypes.forEach((type) => {
+        const div = document.createElement('div');
+        div.className = 'wallet-item';
+        div.innerHTML = `
+            <div class="flex justify-between items-center">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-blue-600">ID: ${type.id}</span>
+                        <span class="text-gray-400">|</span>
+                        <span class="text-gray-900">${type.name}</span>
+                    </div>
+                </div>
+                <button onclick="deleteType(${type.id}, event)" 
+                        class="text-red-500 hover:text-red-600 transition-colors duration-200">
+                    删除
+                </button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    updateTypeSelection();
+}
+
+function updateTypeSelection() {
+    const container = document.getElementById('typeSelection');
+    if (!container) return;
+
+    const sortedTypes = [...types].sort((a, b) => a.id - b.id);
+
+    container.innerHTML = sortedTypes.map(type => `
+        <div class="flex items-center space-x-2 py-1">
+            <input type="checkbox" 
+                id="type-${type.id}" 
+                value="${type.id}"
+                class="type-checkbox"
+                ${editingTemplateIndex !== null &&
+                    strategyTemplates[editingTemplateIndex].selectedTypes.includes(type.id) ? 'checked' : ''}>
+            <label for="type-${type.id}" class="text-sm">
+                <span class="font-medium text-blue-600">ID: ${type.id}</span>
+                <span class="text-gray-400 mx-1">|</span>
+                <span class="text-gray-900">${type.name}</span>
+            </label>
+        </div>
+    `).join('');
+}
+
+function updateWalletSelection() {
+    const container = document.getElementById('walletSelection');
+    if (!container) return;
+
+    container.innerHTML = wallets.map(wallet => `
+        <div class="flex items-center space-x-2 py-1">
+            <input type="checkbox" 
+                id="wallet-${wallet.address}" 
+                value="${wallet.address}"
+                class="wallet-checkbox"
+                ${editingTemplateIndex !== null &&
+                    strategyTemplates[editingTemplateIndex].selectedWallets.includes(wallet.address) ? 'checked' : ''}>
+            <label for="wallet-${wallet.address}" class="text-sm">
+                ${wallet.name} <span class="text-gray-500">(${wallet.address})</span>
+            </label>
+        </div>
+    `).join('');
+}
+
+// 策略模板管理
 function clearModalInputs() {
     document.getElementById('templateName').value = '';
     document.getElementById('templateMinBuyAmount').value = '0.3';
@@ -86,21 +557,17 @@ function clearModalInputs() {
     document.getElementById('templateSellPercent').value = '100';
     document.getElementById('stopLevelsList').innerHTML = '';
 
-    // 清除钱包选择
-    const checkboxes = document.querySelectorAll('.wallet-checkbox');
-    checkboxes.forEach(checkbox => checkbox.checked = false);
-
-    // 清除数据类型选择
-    document.querySelectorAll('.data-type-checkbox').forEach(checkbox => {
-        checkbox.checked = false;
-    });
-    document.getElementById('dataType1Text').value = '类型1';
-    document.getElementById('dataType2Text').value = '类型2';
-    document.getElementById('dataType3Text').value = '类型3';
+    // 清除钱包和类型选择
+    document.querySelectorAll('.wallet-checkbox').forEach(checkbox => checkbox.checked = false);
+    document.querySelectorAll('.type-checkbox').forEach(checkbox => checkbox.checked = false);
 
     // 清除Jito设置
     document.getElementById('jitoEnabled').checked = false;
     document.getElementById('jitoFee').value = '0.0001';
+
+    // 清除防夹设置
+    document.getElementById('antiSandwichEnabled').checked = false;
+    document.getElementById('antiSandwichFee').value = '0.0001';
 }
 
 function fillModalWithTemplate(template) {
@@ -123,22 +590,14 @@ function fillModalWithTemplate(template) {
         });
     }
 
-    // 填充数据类型
-    if (template.dataTypes) {
-        template.dataTypes.forEach((dataType, index) => {
-            const checkbox = document.getElementById(`dataType${index + 1}`);
-            const textInput = document.getElementById(`dataType${index + 1}Text`);
-            if (checkbox && textInput) {
-                checkbox.checked = dataType.selected;
-                textInput.value = dataType.text;
-            }
-        });
-    }
-
-    // 填充Jito设置
+    // 填充Jito和防夹设置
     if (template.jitoSettings) {
         document.getElementById('jitoEnabled').checked = template.jitoSettings.enabled;
         document.getElementById('jitoFee').value = template.jitoSettings.fee;
+    }
+    if (template.antiSandwichSettings) {
+        document.getElementById('antiSandwichEnabled').checked = template.antiSandwichSettings.enabled;
+        document.getElementById('antiSandwichFee').value = template.antiSandwichSettings.fee;
     }
 }
 
@@ -146,9 +605,18 @@ async function saveStrategyTemplate() {
     const selectedWallets = Array.from(document.querySelectorAll('.wallet-checkbox:checked'))
         .map(checkbox => checkbox.value);
 
+    const selectedTypes = Array.from(document.querySelectorAll('.type-checkbox:checked'))
+        .map(checkbox => parseInt(checkbox.value));
+
+    if (selectedTypes.length === 0) {
+        alert('请至少选择一个类型');
+        return;
+    }
+
     const template = {
         name: document.getElementById('templateName').value,
         selectedWallets: selectedWallets,
+        selectedTypes: selectedTypes,
         minBuyAmount: parseFloat(document.getElementById('templateMinBuyAmount').value),
         maxBuyAmount: parseFloat(document.getElementById('templateMaxBuyAmount').value),
         speedMode: document.getElementById('templateSpeedMode').value,
@@ -160,15 +628,13 @@ async function saveStrategyTemplate() {
         trailingStop: parseFloat(document.getElementById('templateTrailingStop').value),
         sellPercent: parseFloat(document.getElementById('templateSellPercent').value),
         stopLevels: collectStopLevels(),
-        // 添加数据类型设置
-        dataTypes: [1, 2, 3].map(i => ({
-            selected: document.getElementById(`dataType${i}`).checked,
-            text: document.getElementById(`dataType${i}Text`).value
-        })),
-        // 添加Jito设置
         jitoSettings: {
             enabled: document.getElementById('jitoEnabled').checked,
             fee: parseFloat(document.getElementById('jitoFee').value)
+        },
+        antiSandwichSettings: {
+            enabled: document.getElementById('antiSandwichEnabled').checked,
+            fee: parseFloat(document.getElementById('antiSandwichFee').value)
         }
     };
 
@@ -200,129 +666,51 @@ async function saveStrategyTemplate() {
         if (editingTemplateIndex !== null) {
             strategyTemplates[editingTemplateIndex] = savedStrategy;
             showToast('策略更新成功');
+            addLog('INFO', `更新策略成功: ${template.name}`);
         } else {
             strategyTemplates.push(savedStrategy);
             showToast('策略创建成功');
+            addLog('INFO', `创建策略成功: ${template.name}`);
         }
 
         refreshTemplateList();
         closeStrategyModal();
     } catch (error) {
         alert(error.message);
+        addLog('ERROR', `保存策略失败: ${error.message}`);
     }
 }
 
-function refreshTemplateList() {
-    const container = document.getElementById('strategyTemplateList');
-    container.innerHTML = '';
-
-    strategyTemplates.forEach((template, index) => {
-        const selectedWalletNames = template.selectedWallets
-            .map(addr => wallets.find(w => w.address === addr)?.name || '未知钱包')
-            .join(', ');
-
-        const div = document.createElement('div');
-        div.className = `strategy-card relative border rounded-lg p-4 cursor-pointer hover:bg-gray-50 ${index === activeStrategyIndex ? 'active' : ''}`;
-        div.onclick = () => selectStrategy(index);
-
-        const checkmark = `
-            <div class="selected-check">
-                <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-            </div>
-        `;
-
-        div.innerHTML = `
-            ${checkmark}
-            <div class="flex justify-between items-center mb-2">
-                <h3 class="font-semibold">${template.name}</h3>
-                <div class="space-x-2">
-                    <button onclick="showEditStrategyModal(${index}, event)" class="text-blue-500 hover:text-blue-600">编辑</button>
-                    <button onclick="deleteTemplate(${index}, event)" class="text-red-500 hover:text-red-600">删除</button>
-                    <button class="text-red-500 hover:text-red-600">&nbsp&nbsp</button>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                <div class="col-span-2">选中钱包: ${selectedWalletNames}</div>
-                <div>买入金额范围: ${template.minBuyAmount} - ${template.maxBuyAmount} SOL</div>
-                <div>滑点: ${template.slippage}%</div>
-                <div>极速模式: ${template.speedMode === 'fast' ? '开启' : '关闭'}</div>
-                <div>防夹模式: ${template.antiSqueeze === 'on' ? '开启' : '关闭'}</div>
-                <div>买入优先费: ${template.buyPriority}</div>
-                <div>卖出优先费: ${template.sellPriority}</div>
-                <div>止损优先费: ${template.stopPriority}</div>
-                <div>移动止损: ${template.trailingStop}%</div>
-                <div>卖出比例: ${template.sellPercent}%</div>
-                <div>数据类型: ${template.dataTypes
-            ?.filter(dt => dt.selected)
-            .map(dt => dt.text)
-            .join(', ') || '未选择'}</div>
-                <div>Jito费用: ${template.jitoSettings?.enabled ? template.jitoSettings.fee : '未启用'}</div>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-
-function refreshWalletList() {
-    const container = document.getElementById('walletList');
-    container.innerHTML = '';
-
-    wallets.forEach((wallet, index) => {
-        const div = document.createElement('div');
-        div.className = 'wallet-item'; // 使用新的wallet-item样式
-        div.innerHTML = `
-            <div class="flex justify-between items-center">
-                <div>
-                    <h3 class="font-semibold">${wallet.name}</h3>
-                    <p class="text-sm text-gray-500">${wallet.address.substring(0, 8) + '...' + wallet.address.substring(38, 44)}</p>
-                </div>
-                <button onclick="deleteWallet(${index}, event)" 
-                        class="text-red-500 hover:text-red-600 transition-colors duration-200">
-                    删除
-                </button>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-
-    // 更新策略模板中的钱包选择
+function showNewStrategyModal() {
+    editingTemplateIndex = null;
+    document.getElementById('modalTitle').textContent = '新建策略模板';
+    clearModalInputs();
     updateWalletSelection();
+    updateTypeSelection();
+    addStopLevel();
+    document.getElementById('strategyModal').classList.remove('hidden');
 }
 
-// 修改initializeData函数
-async function initializeData() {
-    try {
-        // 加载钱包数据
-        const walletsResponse = await fetch('/api/wallets');
-        wallets = await walletsResponse.json();
+function showEditStrategyModal(index, event) {
+    event.stopPropagation();
+    editingTemplateIndex = index;
+    const template = strategyTemplates[index];
+    document.getElementById('modalTitle').textContent = '编辑策略模板';
+    fillModalWithTemplate(template);
+    updateWalletSelection();
+    updateTypeSelection();
 
-        // 加载策略数据
-        const strategiesResponse = await fetch('/api/strategies');
-        strategyTemplates = await strategiesResponse.json();
-
-        // 加载当前激活的策略
-        const activeStrategyResponse = await fetch('/api/active-strategy');
-        const activeStrategyData = await activeStrategyResponse.json();
-        if (activeStrategyData.activeStrategy) {
-            const activeIndex = strategyTemplates.findIndex(
-                template => template.name === activeStrategyData.activeStrategy
-            );
-            if (activeIndex !== -1) {
-                activeStrategyIndex = activeIndex;
-            }
-        }
-
-        refreshWalletList();
-        refreshTemplateList();
-    } catch (error) {
-        console.error('Error loading data:', error);
+    if (!template.stopLevels || template.stopLevels.length === 0) {
+        addStopLevel();
     }
+    document.getElementById('strategyModal').classList.remove('hidden');
 }
 
-// 修改selectStrategy函数
+function closeStrategyModal() {
+    document.getElementById('strategyModal').classList.add('hidden');
+}
+
+// 策略选择逻辑
 async function selectStrategy(index) {
     try {
         const template = strategyTemplates[index];
@@ -337,19 +725,20 @@ async function selectStrategy(index) {
         });
 
         if (!response.ok) {
-            throw new Error('Failed to set active strategy');
+            throw new Error('设置活动策略失败');
         }
 
         activeStrategyIndex = index;
         refreshTemplateList();
         showToast(`已切换至策略: ${template.name}`);
+        addLog('INFO', `切换策略: ${template.name}`);
     } catch (error) {
         console.error('Error selecting strategy:', error);
         showToast('切换策略失败');
+        addLog('ERROR', `切换策略失败: ${error.message}`);
     }
 }
 
-// 修改deleteTemplate函数
 async function deleteTemplate(index, event) {
     event.stopPropagation();
 
@@ -364,7 +753,6 @@ async function deleteTemplate(index, event) {
                 throw new Error('删除策略失败');
             }
 
-            // 如果删除的是当前激活的策略，清除激活状态
             if (activeStrategyIndex === index) {
                 await fetch('/api/active-strategy', {
                     method: 'POST',
@@ -383,209 +771,15 @@ async function deleteTemplate(index, event) {
             strategyTemplates.splice(index, 1);
             refreshTemplateList();
             showToast('策略已删除');
+            addLog('INFO', `删除策略: ${template.name}`);
         } catch (error) {
             alert(error.message);
+            addLog('ERROR', `删除策略失败: ${error.message}`);
         }
     }
 }
 
-
-// API测试相关函数
-async function runApiTest() {
-    const address = document.getElementById('apiTestAddress').value.trim();
-    const resultDiv = document.getElementById('apiTestResult');
-
-    if (!address) {
-        resultDiv.textContent = '请输入Solana地址';
-        resultDiv.className = 'text-red-500';
-        return;
-    }
-
-    try {
-        resultDiv.textContent = '测试中...';
-        resultDiv.className = 'text-blue-500';
-
-        // 模拟API调用延迟
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        resultDiv.textContent = 'API测试成功';
-        resultDiv.className = 'text-green-500';
-    } catch (error) {
-        resultDiv.textContent = '测试失败: ' + error.message;
-        resultDiv.className = 'text-red-500';
-    }
-}
-
-// 钱包管理功能
-function showWalletModal() {
-    document.getElementById('walletModal').classList.remove('hidden');
-}
-
-function closeWalletModal() {
-    document.getElementById('walletModal').classList.add('hidden');
-    document.getElementById('walletName').value = '';
-    document.getElementById('walletPrivateKey').value = '';
-}
-
-async function addWallet() {
-    const name = document.getElementById('walletName').value;
-    let privateKey = document.getElementById('walletPrivateKey').value.trim();
-
-    if (!name || !privateKey) {
-        alert('请填写钱包名称和私钥');
-        return;
-    }
-
-    // 尝试解析为数组格式
-    try {
-        if (privateKey.startsWith('[') && privateKey.endsWith(']')) {
-            privateKey = JSON.parse(privateKey);
-            // 验证数组格式
-            if (!Array.isArray(privateKey) || !privateKey.every(num => Number.isInteger(num) && num >= 0 && num <= 255)) {
-                throw new Error('私钥数组格式无效');
-            }
-        }
-    } catch (e) {
-        // 如果不是有效的数组格式,就按base58字符串处理
-        privateKey = privateKey.replace(/\s/g, ''); // 移除所有空白字符
-    }
-
-    try {
-        const response = await fetch('/api/wallets', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                name: name,
-                privateKey: privateKey
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '添加钱包失败');
-        }
-
-        const wallet = await response.json();
-        wallets.push(wallet);
-        refreshWalletList();
-        closeWalletModal();
-        showToast('钱包添加成功');
-    } catch (error) {
-        alert(error.message);
-    }
-}
-
-async function deleteWallet(index, event) {
-    event.stopPropagation(); // 阻止事件冒泡
-
-    if (confirm('确定要删除这个钱包吗？')) {
-        const wallet = wallets[index];
-        try {
-            const response = await fetch(`/api/wallets/${wallet.address}`, {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                throw new Error('删除钱包失败');
-            }
-
-            wallets.splice(index, 1);
-
-            // 从所有策略中移除被删除的钱包
-            strategyTemplates.forEach(template => {
-                template.selectedWallets = template.selectedWallets.filter(addr => addr !== wallet.address);
-            });
-
-            refreshWalletList();
-            refreshTemplateList();
-            showToast('钱包已删除');
-        } catch (error) {
-            alert(error.message);
-        }
-    }
-}
-
-function showToast(message) {
-    // 创建toast元素
-    const toast = document.createElement('div');
-    toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-0 opacity-100 z-50';
-    toast.textContent = message;
-
-    // 添加到页面
-    document.body.appendChild(toast);
-
-    // 2秒后淡出并移除
-    setTimeout(() => {
-        toast.classList.add('translate-y-2', 'opacity-0');
-        setTimeout(() => {
-            document.body.removeChild(toast);
-        }, 300);
-    }, 2000);
-}
-
-function duplicateTemplate(index, event) {
-    event.stopPropagation(); // 阻止事件冒泡
-
-    const template = JSON.parse(JSON.stringify(strategyTemplates[index])); // 深拷贝
-    template.name = `${template.name} (复制)`;
-    strategyTemplates.push(template);
-    refreshTemplateList();
-
-    showToast(`已复制策略: ${template.name}`);
-}
-
-
-// 策略模板编辑相关函数
-function showNewStrategyModal() {
-    editingTemplateIndex = null;
-    document.getElementById('modalTitle').textContent = '新建策略模板';
-    clearModalInputs();
-    updateWalletSelection();
-    addStopLevel();
-    document.getElementById('strategyModal').classList.remove('hidden');
-}
-
-function showEditStrategyModal(index, event) {
-    event.stopPropagation(); // 阻止事件冒泡
-
-    editingTemplateIndex = index;
-    const template = strategyTemplates[index];
-    document.getElementById('modalTitle').textContent = '编辑策略模板';
-    fillModalWithTemplate(template);
-    updateWalletSelection();
-
-    if (!template.stopLevels || template.stopLevels.length === 0) {
-        addStopLevel();
-    }
-    document.getElementById('strategyModal').classList.remove('hidden');
-}
-
-function closeStrategyModal() {
-    document.getElementById('strategyModal').classList.add('hidden');
-}
-
-function updateWalletSelection() {
-    const container = document.getElementById('walletSelection');
-    if (!container) return;
-
-    container.innerHTML = wallets.map(wallet => `
-        <div class="flex items-center space-x-2 py-1">
-            <input type="checkbox" 
-                id="wallet-${wallet.address}" 
-                value="${wallet.address}"
-                class="wallet-checkbox"
-                ${editingTemplateIndex !== null &&
-    strategyTemplates[editingTemplateIndex].selectedWallets.includes(wallet.address) ? 'checked' : ''}>
-            <label for="wallet-${wallet.address}" class="text-sm">
-                ${wallet.name} <span class="text-gray-500">(${wallet.address})</span>
-            </label>
-        </div>
-    `).join('');
-}
-
-
+// 止盈止损相关函数
 function addStopLevel(increase = '', sell = '', position = '') {
     const container = document.createElement('div');
     container.className = 'flex gap-4 items-center';
@@ -617,7 +811,6 @@ function addStopLevel(increase = '', sell = '', position = '') {
     `;
     document.getElementById('stopLevelsList').appendChild(container);
 
-    // 为新添加的输入框设置初始值时触发更新
     if (sell || position) {
         const sellInput = container.querySelector('.stop-sell');
         updatePosition(sellInput);
@@ -637,7 +830,6 @@ function validatePercentageInput(input) {
     return value;
 }
 
-// 获取当前行之前所有行的总卖出比例
 function getPreviousTotalSellPercentage(currentRow) {
     let total = 0;
     const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
@@ -645,53 +837,34 @@ function getPreviousTotalSellPercentage(currentRow) {
 
     for (let i = 0; i < currentIndex; i++) {
         const sellValue = parseFloat(allRows[i].querySelector('.stop-position').value) || 0;
-        total += sellValue / 100; // 转换为小数
+        total += sellValue / 100;
     }
 
     return total;
 }
 
-// 更新总仓位比例（当卖出比例改变时调用）
 function updatePosition(sellInput) {
     const currentRow = sellInput.closest('div').parentElement;
     const positionInput = currentRow.querySelector('.stop-position');
     const sellPercentage = parseFloat(sellInput.value) || 0;
     const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
-
-    // 计算剩余仓位比例
     const remainingPosition = 1 - previousTotalSell;
-
-    // 计算当前级别的总仓位比例
     const positionPercentage = (sellPercentage / 100) * remainingPosition * 100;
-
-    // 更新总仓位比例输入框的值
     positionInput.value = positionPercentage.toFixed(4);
-
-    // 更新后续行的总仓位比例
     updateSubsequentPositions(currentRow);
 }
 
-// 更新卖出比例（当总仓位比例改变时调用）
 function updateSell(positionInput) {
     const currentRow = positionInput.closest('div').parentElement;
     const sellInput = currentRow.querySelector('.stop-sell');
     const positionPercentage = parseFloat(positionInput.value) || 0;
     const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
-
-    // 计算剩余仓位比例
     const remainingPosition = 1 - previousTotalSell;
-
-    // 计算卖出比例
     const sellPercentage = (positionPercentage / 100) / remainingPosition * 100;
-
-    // 更新卖出比例输入框的值
     sellInput.value = sellPercentage.toFixed(2);
-
-    // 更新后续行的总仓位比例
     updateSubsequentPositions(currentRow);
 }
 
-// 更新当前行之后的所有行的总仓位比例
 function updateSubsequentPositions(currentRow) {
     const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
     const currentIndex = allRows.indexOf(currentRow);
@@ -720,24 +893,163 @@ function collectStopLevels() {
     return levels;
 }
 
+// 日志管理
+let logQueue = [];
+let isLogging = false;
 
-// 更新所有输入框的step属性
-function updateAllInputStepAttributes() {
-    const numericInputs = document.querySelectorAll('input[type="number"]');
-    numericInputs.forEach(input => {
-        if (input.id.includes('Priority')) {
-            input.setAttribute('step', '0.001');
-        } else if (input.id.includes('Slippage') ||
-            input.id.includes('BuyAmount') ||
-            input.id.includes('TrailingStop') ||
-            input.id.includes('SellPercent')) {
-            input.setAttribute('step', '0.1');
-        }
-    });
+async function addLog(level, message) {
+    logQueue.push({ level, message });
+    if (!isLogging) {
+        await processLogQueue();
+    }
 }
 
-// 页面加载时初始化
+async function processLogQueue() {
+    if (logQueue.length === 0) {
+        isLogging = false;
+        return;
+    }
+
+    isLogging = true;
+    const { level, message } = logQueue.shift();
+
+    try {
+        const response = await fetch('/api/logs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                level: level,
+                message: message
+            })
+        });
+
+        if (response.ok) {
+            refreshLogs();
+        }
+    } catch (error) {
+        console.error('Error adding log:', error);
+    }
+
+    setTimeout(() => processLogQueue(), 100);
+}
+
+let lastLogTimestamp = null;
+
+async function refreshLogs() {
+    try {
+        const response = await fetch('/api/logs');
+        const logs = await response.json();
+
+        const logOutput = document.getElementById('logOutput');
+        logOutput.innerHTML = logs.map(log => `
+            <div class="log-entry py-1 ${log.timestamp !== lastLogTimestamp ? 'border-tborder-gray-200' : ''}">
+                <span class="text-gray-500">${log.timestamp}</span>
+                <span class="px-2 rounded ${getLogLevelClass(log.level)}">${log.level}</span>
+                <span class="text-gray-900">${log.message}</span>
+            </div>
+        `).join('');
+
+        if (logs.length > 0) {
+            lastLogTimestamp = logs[logs.length - 1].timestamp;
+        }
+
+        logOutput.scrollTop = logOutput.scrollHeight;
+    } catch (error) {
+        console.error('Error refreshing logs:', error);
+    }
+}
+
+function getLogLevelClass(level) {
+    switch (level.toUpperCase()) {
+        case 'INFO':
+            return 'bg-blue-100 text-blue-800';
+        case 'WARNING':
+            return 'bg-yellow-100 text-yellow-800';
+        case 'ERROR':
+            return 'bg-red-100 text-red-800';
+        default:
+            return 'bg-gray-100 text-gray-800';
+    }
+}
+
+async function clearLogs() {
+    if (confirm('确定要清除所有日志吗？')) {
+        try {
+            logQueue = [];
+            isLogging = false;
+            document.getElementById('logOutput').innerHTML = '';
+            addLog('INFO', '日志已清除');
+        } catch (error) {
+            console.error('Error clearing logs:', error);
+            showToast('清除日志失败');
+        }
+    }
+}
+
+// Toast消息
+function showToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-0 opacity-100 z-50';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 2000);
+}
+
+// 初始化
+async function initializeData() {
+    try {
+        const [walletsResponse, typesResponse, strategiesResponse, activeStrategyResponse] = await Promise.all([
+            fetch('/api/wallets'),
+            fetch('/api/types'),
+            fetch('/api/strategies'),
+            fetch('/api/active-strategy')
+        ]);
+
+        wallets = await walletsResponse.json();
+        types = await typesResponse.json();
+        // 确保类型ID为数字
+        types = types.map(type => ({
+            ...type,
+            id: parseInt(type.id)
+        }));
+
+        strategyTemplates = await strategiesResponse.json();
+        // 确保策略中的类型ID为数字
+        strategyTemplates = strategyTemplates.map(strategy => ({
+            ...strategy,
+            selectedTypes: strategy.selectedTypes.map(id => parseInt(id))
+        }));
+
+        const activeStrategyData = await activeStrategyResponse.json();
+        if (activeStrategyData.activeStrategy) {
+            const activeIndex = strategyTemplates.findIndex(
+                template => template.name === activeStrategyData.activeStrategy
+            );
+            if (activeIndex !== -1) {
+                activeStrategyIndex = activeIndex;
+            }
+        }
+
+        refreshWalletList();
+        refreshTypeList();
+        refreshTemplateList();
+        refreshLogs();
+        addLog('INFO', '系统初始化完成');
+    } catch (error) {
+        console.error('Error loading data:', error);
+        addLog('ERROR', `初始化失败: ${error.message}`);
+    }
+}
+
+// 页面加载初始化
 document.addEventListener('DOMContentLoaded', () => {
     initializeData();
-    updateAllInputStepAttributes();
 });
