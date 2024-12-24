@@ -62,7 +62,7 @@
 
         function formatAmount(amount, isSol) {
             // SOL保持原样(除以1e9)，Token除以1000
-            const divisor = isSol ? 1000000000 : 1000;
+            const divisor = isSol ? 1000000 : 1000;
             return (parseInt(amount) / divisor).toFixed(isSol ? 9 : 3);
         }
 
@@ -88,7 +88,7 @@
                     <div class="text-green-600 font-medium mb-2">获取报价成功！</div>
                     <div class="space-y-2">
                         <div>支付: ${isBuy ? inAmount + ' SOL' : inAmount / 1000 + ' Token'}</div>
-                        <div>获得: ${isBuy ? outAmount + ' Token' : outAmount + ' SOL'}</div>
+                        <div>获得: ${isBuy ? outAmount + ' Token' : outAmount / 1000 + ' SOL'}</div>
                         <div>价格影响: ${parseFloat(quoteData.priceImpactPct).toFixed(4)}%</div>
                     </div>
                 `;
