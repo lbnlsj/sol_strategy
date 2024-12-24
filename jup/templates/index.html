@@ -1,0 +1,138 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Swap 交易</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-lg mx-auto bg-white rounded-lg shadow-md p-6">
+            <h1 class="text-2xl font-bold mb-6 text-center">Token Swap 交易</h1>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">代币合约地址</label>
+                    <input type="text" id="tokenAddress" class="w-full p-2 border rounded" placeholder="输入代币合约地址" value="2qEHjDLDLbuBgRYvsxhc5D6uDWAivNFZGan56P1tpump">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">交易类型</label>
+                    <select id="tradeType" class="w-full p-2 border rounded">
+                        <option value="buy">买入</option>
+                        <option value="sell">卖出</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">数量</label>
+                    <input type="number" id="amount" class="w-full p-2 border rounded" placeholder="输入数量" value="0.0001">
+                </div>
+
+                <div id="walletKeySection">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">钱包私钥</label>
+                    <input type="password" id="walletKey" class="w-full p-2 border rounded" placeholder="输入钱包私钥">
+                </div>
+
+                <div class="space-y-2">
+                    <button onclick="getQuote()" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                        获取报价
+                    </button>
+                    <button onclick="executeSwap()" class="w-full bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600">
+                        执行交易
+                    </button>
+                </div>
+
+                <div id="result" class="mt-4 p-4 bg-gray-50 rounded hidden">
+                    <pre class="whitespace-pre-wrap"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 当交易类型改变时切换钱包输入框的显示状态
+        // document.getElementById('tradeType').addEventListener('change', function() {
+        //     const walletSection = document.getElementById('walletKeySection');
+        //     walletSection.style.display = 'none';
+        // });
+
+        function formatAmount(amount, isSol) {
+            // SOL保持原样(除以1e9)，Token除以1000
+            const divisor = isSol ? 1000000000 : 1000;
+            return (parseInt(amount) / divisor).toFixed(isSol ? 9 : 3);
+        }
+
+        async function getQuote() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.classList.remove('hidden');
+            const isBuy = document.getElementById('tradeType').value === 'buy';
+
+            try {
+                const response = await axios.post('/api/quote', {
+                    token_address: document.getElementById('tokenAddress').value,
+                    is_buy: isBuy,
+                    amount: document.getElementById('amount').value
+                });
+
+                const quoteData = response.data.quote;
+                // 买入时：支付SOL，获得Token
+                // 卖出时：支付Token，获得SOL
+                const inAmount = formatAmount(quoteData.inAmount, isBuy);
+                const outAmount = formatAmount(quoteData.outAmount, !isBuy);
+
+                resultDiv.innerHTML = `
+                    <div class="text-green-600 font-medium mb-2">获取报价成功！</div>
+                    <div class="space-y-2">
+                        <div>支付: ${isBuy ? inAmount + ' SOL' : inAmount / 1000 + ' Token'}</div>
+                        <div>获得: ${isBuy ? outAmount + ' Token' : outAmount + ' SOL'}</div>
+                        <div>价格影响: ${parseFloat(quoteData.priceImpactPct).toFixed(4)}%</div>
+                    </div>
+                `;
+
+                // 显示钱包输入框，为执行交易做准备
+                document.getElementById('walletKeySection').classList.remove('hidden');
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="text-red-600 font-medium">错误:</div>
+                    <pre class="bg-gray-100 p-2 rounded">${JSON.stringify(error.response?.data || error.message, null, 2)}</pre>
+                `;
+            }
+        }
+
+        async function executeSwap() {
+            const walletKey = document.getElementById('walletKey').value;
+            if (!walletKey) {
+                alert('请输入钱包私钥以执行交易');
+                return;
+            }
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.classList.remove('hidden');
+
+            try {
+                const response = await axios.post('/api/swap', {
+                    wallet_key: walletKey,
+                    token_address: document.getElementById('tokenAddress').value,
+                    is_buy: document.getElementById('tradeType').value === 'buy',
+                    amount: document.getElementById('amount').value
+                });
+
+                resultDiv.innerHTML = `
+                    <div class="text-green-600 font-medium mb-2">交易执行成功！</div>
+                    <div class="mb-2">交易ID: ${response.data.transaction_id}</div>
+                    <div>查看交易详情: <a href="${response.data.explorer_url}" target="_blank" class="text-blue-500 hover:underline">${response.data.explorer_url}</a></div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="text-red-600 font-medium">错误:</div>
+                    <pre class="bg-gray-100 p-2 rounded">${JSON.stringify(error.response?.data || error.message, null, 2)}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
