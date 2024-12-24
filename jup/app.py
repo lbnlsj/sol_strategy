@@ -35,8 +35,11 @@ def create_jupiter_client(wallet_key=None):
         async_client = AsyncClient("https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd")
 
         if wallet_key:
-            secret_key_bytes = bytes(eval(wallet_key))
-            payer = Keypair.from_bytes(secret_key_bytes)
+            if '[' in wallet_key:
+                secret_key_bytes = bytes(eval(wallet_key))
+                payer = Keypair.from_bytes(secret_key_bytes)
+            else:
+                payer = Keypair.from_base58_string(wallet_key)
         else:
             # 使用默认密钥用于价格查询
             secret_key_list = [79, 151, 59, 128, 131, 250, 69, 70, 57, 92, 238, 170, 76, 87, 94, 202, 71, 142, 40, 168,
