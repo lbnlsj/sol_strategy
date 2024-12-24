@@ -6,10 +6,161 @@ let editingTemplateIndex = null;
 let activeStrategyIndex = null;
 
 
-
 // 在文件顶部添加任务状态跟踪变量
 let runningTasks = new Map(); // 用于跟踪运行中的任务 {templateName: taskId}
 
+
+
+
+
+
+
+
+
+// Function to validate percentage input
+function validatePercentageInput(input) {
+    let value = parseFloat(input.value);
+    if (isNaN(value)) {
+        value = 0;
+    } else if (value < 0) {
+        value = 0;
+    } else if (value > 100) {
+        value = 100;
+    }
+    input.value = value;
+    return value;
+}
+
+// Calculate total sell percentage from previous rows
+function getPreviousTotalSellPercentage(currentRow) {
+    let total = 0;
+    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
+    const currentIndex = allRows.indexOf(currentRow);
+
+    // Skip first row in calculations, start from index 1
+    for (let i = 1; i < currentIndex; i++) {
+        const sellValue = parseFloat(allRows[i].querySelector('.stop-position').value) || 0;
+        total += sellValue / 100;
+    }
+
+    return total;
+}
+
+// Update position based on sell percentage
+function updatePosition(sellInput) {
+    const currentRow = sellInput.closest('div').parentElement;
+    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
+    const currentIndex = allRows.indexOf(currentRow);
+
+    // If this is the first row, don't perform automatic calculations
+    if (currentIndex === 0) {
+        return;
+    }
+
+    const positionInput = currentRow.querySelector('.stop-position');
+    const sellPercentage = parseFloat(sellInput.value) || 0;
+    const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
+    const remainingPosition = 1 - previousTotalSell;
+    const positionPercentage = (sellPercentage / 100) * remainingPosition * 100;
+    positionInput.value = positionPercentage.toFixed(4);
+    updateSubsequentPositions(currentRow);
+}
+
+// Update sell percentage based on position
+function updateSell(positionInput) {
+    const currentRow = positionInput.closest('div').parentElement;
+    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
+    const currentIndex = allRows.indexOf(currentRow);
+
+    // If this is the first row, don't perform automatic calculations
+    if (currentIndex === 0) {
+        return;
+    }
+
+    const sellInput = currentRow.querySelector('.stop-sell');
+    const positionPercentage = parseFloat(positionInput.value) || 0;
+    const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
+    const remainingPosition = 1 - previousTotalSell;
+    const sellPercentage = (positionPercentage / 100) / remainingPosition * 100;
+    sellInput.value = sellPercentage.toFixed(2);
+    updateSubsequentPositions(currentRow);
+}
+
+// Update all subsequent positions after a change
+function updateSubsequentPositions(currentRow) {
+    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
+    const currentIndex = allRows.indexOf(currentRow);
+
+    // Skip updates if we're on the first row
+    if (currentIndex === 0) {
+        return;
+    }
+
+    // Update all rows after the current one
+    for (let i = currentIndex + 1; i < allRows.length; i++) {
+        const row = allRows[i];
+        const sellInput = row.querySelector('.stop-sell');
+        updatePosition(sellInput);
+    }
+}
+
+// Add a new stop level row
+function addStopLevel(increase = '', sell = '', position = '') {
+    const container = document.createElement('div');
+    container.className = 'flex gap-4 items-center';
+    container.innerHTML = `
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-increase" 
+                value="${increase}" placeholder="涨幅(%)" step="0.1"
+                min="-100" max="1000">
+        </div>
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-sell" 
+                value="${sell}" placeholder="卖出比例(%)" step="0.1"
+                min="0" max="100"
+                onchange="validatePercentageInput(this); updatePosition(this)" 
+                oninput="validatePercentageInput(this); updatePosition(this)">
+        </div>
+        <div class="flex-1">
+            <input type="number" class="w-full px-3 py-2 border rounded-md stop-position" 
+                value="${position}" placeholder="总仓位比例(%)" step="0.1"
+                min="0" max="100"
+                onchange="validatePercentageInput(this); updateSell(this)" 
+                oninput="validatePercentageInput(this); updateSell(this)">
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-red-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    `;
+    document.getElementById('stopLevelsList').appendChild(container);
+
+    // Only update if this isn't the first row and we have values
+    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
+    if (allRows.length > 1 && (sell || position)) {
+        const sellInput = container.querySelector('.stop-sell');
+        updatePosition(sellInput);
+    }
+}
+
+// Collect all stop levels
+function collectStopLevels() {
+    const levels = [];
+    document.querySelectorAll('#stopLevelsList > div').forEach(div => {
+        const increase = div.querySelector('.stop-increase').value;
+        const sell = div.querySelector('.stop-sell').value;
+        const position = div.querySelector('.stop-position').value;
+        if (increase && sell && position) {
+            levels.push({
+                increase: parseFloat(increase),
+                sell: parseFloat(sell),
+                position: parseFloat(position)
+            });
+        }
+    });
+    return levels;
+}
 
 
 
@@ -252,10 +403,6 @@ function refreshTemplateList() {
 }
 
 
-
-
-
-
 // 在初始化函数中添加获取运行中任务的逻辑
 async function initializeData() {
     try {
@@ -301,10 +448,6 @@ async function initializeData() {
         addLog('ERROR', `初始化失败: ${error.message}`);
     }
 }
-
-
-
-
 
 
 // Add these variables at the top of main.js
@@ -893,120 +1036,6 @@ async function selectStrategy(index) {
         showToast('切换策略失败');
         addLog('ERROR', `切换策略失败: ${error.message}`);
     }
-}
-
-// 止盈止损相关函数
-function addStopLevel(increase = '', sell = '', position = '') {
-    const container = document.createElement('div');
-    container.className = 'flex gap-4 items-center';
-    container.innerHTML = `
-        <div class="flex-1">
-            <input type="number" class="w-full px-3 py-2 border rounded-md stop-increase" 
-                value="${increase}" placeholder="涨幅(%)" step="0.1"
-                min="-100" max="1000">
-        </div>
-        <div class="flex-1">
-            <input type="number" class="w-full px-3 py-2 border rounded-md stop-sell" 
-                value="${sell}" placeholder="卖出比例(%)" step="0.1"
-                min="0" max="100"
-                onchange="validatePercentageInput(this); updatePosition(this)" 
-                oninput="validatePercentageInput(this); updatePosition(this)">
-        </div>
-        <div class="flex-1">
-            <input type="number" class="w-full px-3 py-2 border rounded-md stop-position" 
-                value="${position}" placeholder="总仓位比例(%)" step="0.1"
-                min="0" max="100"
-                onchange="validatePercentageInput(this); updateSell(this)" 
-                oninput="validatePercentageInput(this); updateSell(this)">
-        </div>
-        <button onclick="this.parentElement.remove()" class="text-red-500">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-        </button>
-    `;
-    document.getElementById('stopLevelsList').appendChild(container);
-
-    if (sell || position) {
-        const sellInput = container.querySelector('.stop-sell');
-        updatePosition(sellInput);
-    }
-}
-
-function validatePercentageInput(input) {
-    let value = parseFloat(input.value);
-    if (isNaN(value)) {
-        value = 0;
-    } else if (value < 0) {
-        value = 0;
-    } else if (value > 100) {
-        value = 100;
-    }
-    input.value = value;
-    return value;
-}
-
-function getPreviousTotalSellPercentage(currentRow) {
-    let total = 0;
-    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
-    const currentIndex = allRows.indexOf(currentRow);
-
-    for (let i = 0; i < currentIndex; i++) {
-        const sellValue = parseFloat(allRows[i].querySelector('.stop-position').value) || 0;
-        total += sellValue / 100;
-    }
-
-    return total;
-}
-
-function updatePosition(sellInput) {
-    const currentRow = sellInput.closest('div').parentElement;
-    const positionInput = currentRow.querySelector('.stop-position');
-    const sellPercentage = parseFloat(sellInput.value) || 0;
-    const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
-    const remainingPosition = 1 - previousTotalSell;
-    const positionPercentage = (sellPercentage / 100) * remainingPosition * 100;
-    positionInput.value = positionPercentage.toFixed(4);
-    updateSubsequentPositions(currentRow);
-}
-
-function updateSell(positionInput) {
-    const currentRow = positionInput.closest('div').parentElement;
-    const sellInput = currentRow.querySelector('.stop-sell');
-    const positionPercentage = parseFloat(positionInput.value) || 0;
-    const previousTotalSell = getPreviousTotalSellPercentage(currentRow);
-    const remainingPosition = 1 - previousTotalSell;
-    const sellPercentage = (positionPercentage / 100) / remainingPosition * 100;
-    sellInput.value = sellPercentage.toFixed(2);
-    updateSubsequentPositions(currentRow);
-}
-
-function updateSubsequentPositions(currentRow) {
-    const allRows = Array.from(document.querySelectorAll('#stopLevelsList > div'));
-    const currentIndex = allRows.indexOf(currentRow);
-
-    for (let i = currentIndex + 1; i < allRows.length; i++) {
-        const row = allRows[i];
-        const sellInput = row.querySelector('.stop-sell');
-        updatePosition(sellInput);
-    }
-}
-
-function collectStopLevels() {
-    const levels = [];
-    document.querySelectorAll('#stopLevelsList > div').forEach(div => {
-        const increase = div.querySelector('.stop-increase').value;
-        const sell = div.querySelector('.stop-sell').value;
-        const position = div.querySelector('.stop-position').value;
-        if (increase && sell && position) {
-            levels.push({
-                increase: parseFloat(increase),
-                sell: parseFloat(sell),
-                position: parseFloat(position)
-            });
-        }
-    });
-    return levels;
 }
 
 // 日志管理
