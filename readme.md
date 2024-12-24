@@ -12,3 +12,20 @@
 6.上面几项内容的匹配
 
 ```
+
+```text
+static/js/
+├── index.js              # 主入口文件
+├── api.js               # API 请求封装
+├── store.js             # 全局状态管理
+├── modules/
+│   ├── strategy.js      # 策略管理相关
+│   ├── wallet.js        # 钱包管理相关
+│   ├── settings.js      # 设置管理相关
+│   ├── type.js          # 类型管理相关
+│   ├── task.js          # 任务管理相关
+│   └── log.js           # 日志管理相关
+└── utils/
+    ├── toast.js         # Toast提示工具
+    └── stopLevel.js     # 止盈止损相关计算工具
+```

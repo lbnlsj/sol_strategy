@@ -1,350 +1,446 @@
+# app.py
 from flask import Flask, jsonify, request, render_template
-import json
-from datetime import datetime
+from utilities import (
+    StorageManager,
+    WalletManager,
+    SettingsManager,
+    StrategyManager,
+    TaskManager,
+    LogManager
+)
 import os
-
-app = Flask(__name__,
-            static_folder='static',
-            template_folder='templates')
-
-# 修改 app.py 中的任务相关代码
-
-from flask import Flask, jsonify, request
+import decimal
 from datetime import datetime
+from utilities.task_integration import initialize_task_executor
 
-# 添加新的模拟数据存储
-mock_tasks = {}  # 存储运行中的任务
-task_counter = 0  # 用于生成任务ID
+app = Flask(__name__)
 
-# 在 app.py 中添加策略 ID 计数器
-strategy_id_counter = 0  # 用于生成策略ID
-
-
-# 修改策略保存/更新接口
-@app.route('/api/strategies', methods=['POST'])
-def add_strategy():
-    global strategy_id_counter
-    strategy_data = request.json
-
-    # 如果传入了strategy_id，说明是更新操作
-    strategy_id = strategy_data.get('id')
-
-    if strategy_id is not None:
-        # 更新现有策略
-        existing_strategy = next(
-            (s for s in mock_strategies if s["id"] == strategy_id),
-            None
-        )
-        if existing_strategy:
-            for i, strategy in enumerate(mock_strategies):
-                if strategy["id"] == strategy_id:
-                    # 保持原有ID
-                    strategy_data["id"] = strategy_id
-                    mock_strategies[i] = strategy_data
-                    return jsonify(strategy_data)
-            return jsonify({"error": "Strategy not found"}), 404
-    else:
-        # 添加新策略
-        strategy_id_counter += 1
-        strategy_data["id"] = strategy_id_counter
-        mock_strategies.append(strategy_data)
-
-    return jsonify(strategy_data)
+# Initialize all managers
+storage = StorageManager(data_dir="data")
+wallet_manager = WalletManager(storage)
+settings_manager = SettingsManager(storage)
+strategy_manager = StrategyManager(storage)
+task_manager = TaskManager(storage)
+log_manager = LogManager(storage)
+# 初始化任务执行器
+initialize_task_executor(app, storage, task_manager, strategy_manager, log_manager)
 
 
-# 修改策略删除接口
-@app.route('/api/strategies/<int:strategy_id>', methods=['DELETE'])
-def delete_strategy(strategy_id):
-    global mock_strategies
-    original_length = len(mock_strategies)
-    mock_strategies = [s for s in mock_strategies if s["id"] != strategy_id]
-
-    if len(mock_strategies) == original_length:
-        return jsonify({"error": "Strategy not found"}), 404
-
-    return jsonify({"success": True})
-
-
-# 修改获取单个策略接口
-@app.route('/api/strategies/<int:strategy_id>', methods=['GET'])
-def get_strategy(strategy_id):
-    strategy = next(
-        (s for s in mock_strategies if s["id"] == strategy_id),
-        None
-    )
-    if strategy:
-        return jsonify(strategy)
-    return jsonify({"error": "Strategy not found"}), 404
-
-
-# 修改任务创建接口
-@app.route('/api/tasks', methods=['POST'])
-def create_task():
-    global task_counter
-    data = request.json
-    strategy_id = data.get("strategyId")
-
-    # 检查策略是否存在
-    strategy = next((s for s in mock_strategies if s["id"] == strategy_id), None)
-    if not strategy:
-        return jsonify({"error": "Strategy not found"}), 404
-
-    # 生成任务ID
-    task_counter += 1
-    task_id = str(task_counter)
-
-    # 创建新任务
-    task = {
-        "id": task_id,
-        "strategyId": strategy_id,
-        "strategyName": strategy["name"],  # 保存策略名称用于显示
-        "startTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "status": "running"
-    }
-
-    mock_tasks[task_id] = task
-    return jsonify(task)
-
-
-# 任务管理相关接口
-@app.route('/api/tasks', methods=['GET'])
-def get_tasks():
-    # 返回所有运行中的任务
-    return jsonify([
-        {
-            "id": task_id,
-            "templateName": task["templateName"],
-            "startTime": task["startTime"],
-            "status": task["status"]
-        }
-        for task_id, task in mock_tasks.items()
-    ])
-
-
-@app.route('/api/tasks/<task_id>/stop', methods=['POST'])
-def stop_task(task_id):
-    if task_id in mock_tasks:
-        del mock_tasks[task_id]
-        return jsonify({"success": True})
-    return jsonify({"error": "Task not found"}), 404
-
-
-@app.route('/api/tasks/<task_id>', methods=['GET'])
-def get_task(task_id):
-    task = mock_tasks.get(task_id)
-    if task:
-        return jsonify(task)
-    return jsonify({"error": "Task not found"}), 404
-
-
-# 模拟数据存储
-mock_wallets = []
-mock_strategies = []
-mock_types = []
-mock_logs = []
-mock_settings = {
-    "rpcUrl": "https://api.mainnet-beta.solana.com",
-    "jitoRpcUrl": "https://jito-api.mainnet-beta.solana.com",
-    "wsUrl": "wss://api.mainnet-beta.solana.com",
-    "wsPort": 8900
-}
-active_strategy = None
-
-
-# 模拟一些初始数据
-def init_mock_data():
-    global strategy_id_counter  # 确保可以更新全局计数器
-
-    # 添加一些模拟钱包
-    mock_wallets.extend([
-        {
-            "name": "测试钱包1",
-            "address": "HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH"
-        },
-        {
-            "name": "测试钱包2",
-            "address": "5BZWY6XWPxuWFxs2jagkmUkCoBWmJ6c4YEArr83hYBWk"
-        }
-    ])
-
-    # 添加一些模拟类型
-    mock_types.extend([
-        {
-            "id": 1,
-            "name": "类型1"
-        },
-        {
-            "id": 2,
-            "name": "类型2"
-        }
-    ])
-
-    # 添加一些模拟策略
-    strategy_id_counter += 1  # 增加计数器
-    mock_strategies.extend([
-        {
-            "id": strategy_id_counter,  # 使用计数器作为ID
-            "name": "默认策略",
-            "selectedWallets": ["HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH"],
-            "minBuyAmount": 0.3,
-            "maxBuyAmount": 0.5,
-            "speedMode": "normal",
-            "antiSqueeze": "off",
-            "buyPriority": 0.003,
-            "sellPriority": 0.003,
-            "stopPriority": 0.003,
-            "slippage": 0.25,
-            "trailingStop": 50,
-            "sellPercent": 100,
-            "stopLevels": [
-                {"increase": 50, "sell": 50, "position": 50},
-                {"increase": 100, "sell": 100, "position": 100}
-            ],
-            "selectedTypes": [1],  # 使用类型ID而不是字符串
-            "jitoSettings": {
-                "enabled": False,
-                "fee": 0.0001
-            },
-            "antiSandwichSettings": {
-                "enabled": False,
-                "fee": 0.0001
-            }
-        }
-    ])
-
-
-# 初始化模拟数据
-init_mock_data()
-
-
-# 主页路由
+# Main route for web interface
 @app.route('/')
 def index():
     return render_template('index.html')
 
 
-# API路由定义
+# Wallet Management API
 @app.route('/api/wallets', methods=['GET'])
 def get_wallets():
-    return jsonify(mock_wallets)
+    try:
+        return jsonify(wallet_manager.get_public_wallet_info())
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取钱包列表失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/wallets', methods=['POST'])
 def add_wallet():
-    wallet_data = request.json
-
-    # 模拟通过私钥生成地址
-    import random
-    mock_address = ''.join(random.choices('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz', k=44))
-
-    new_wallet = {
-        "name": wallet_data["name"],
-        "address": mock_address
-    }
-    mock_wallets.append(new_wallet)
-    return jsonify(new_wallet)
+    try:
+        wallet_data = request.json
+        new_wallet = wallet_manager.add_wallet(
+            name=wallet_data["name"],
+            private_key=wallet_data["privateKey"]
+        )
+        log_manager.add_log("INFO", f"添加钱包成功: {wallet_data['name']}")
+        return jsonify(new_wallet)
+    except ValueError as e:
+        log_manager.add_log("ERROR", f"添加钱包失败: {str(e)}")
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        log_manager.add_log("ERROR", f"添加钱包失败: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/wallets/<address>', methods=['DELETE'])
 def delete_wallet(address):
-    global mock_wallets
-    mock_wallets = [w for w in mock_wallets if w["address"] != address]
-    return jsonify({"success": True})
+    try:
+        if wallet_manager.remove_wallet(address):
+            log_manager.add_log("INFO", f"删除钱包成功: {address}")
+            return jsonify({"success": True})
+        log_manager.add_log("ERROR", f"删除钱包失败: 钱包不存在 {address}")
+        return jsonify({"error": "Wallet not found"}), 404
+    except Exception as e:
+        log_manager.add_log("ERROR", f"删除钱包失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/strategies', methods=['GET'])
-def get_strategies():
-    return jsonify(mock_strategies)
-
-
-@app.route('/api/active-strategy', methods=['GET'])
-def get_active_strategy():
-    return jsonify({"activeStrategy": active_strategy})
-
-
-@app.route('/api/active-strategy', methods=['POST'])
-def set_active_strategy():
-    global active_strategy
-    data = request.json
-    active_strategy = data.get("strategyName")
-    return jsonify({"success": True})
-
-
+# Settings Management API
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
-    return jsonify(mock_settings)
+    try:
+        return jsonify(settings_manager.settings)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取设置失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/settings', methods=['POST'])
 def update_settings():
-    global mock_settings
-    settings_data = request.json
-    mock_settings.update(settings_data)
-    return jsonify(mock_settings)
+    try:
+        settings_data = request.json
+        updated_settings = settings_manager.update_settings(settings_data)
+        log_manager.add_log("INFO", "更新设置成功")
+        return jsonify(updated_settings)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"更新设置失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
-# 类型管理API
+# Strategy Management API
+@app.route('/api/strategies', methods=['GET'])
+def get_strategies():
+    try:
+        strategies = strategy_manager.strategies
+        # Add active status to each strategy
+        active_templates = strategy_manager.active_templates
+        for strategy in strategies:
+            strategy['isActive'] = strategy['id'] in active_templates
+        return jsonify(strategies)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取策略列表失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/strategies', methods=['POST'])
+def add_strategy():
+    try:
+        strategy_data = request.json
+
+        # Convert numeric fields to proper precision
+        numeric_fields = {
+            'minBuyAmount': 4, 'maxBuyAmount': 4,
+            'buyPriority': 6, 'sellPriority': 6, 'stopPriority': 6,
+            'slippage': 4, 'trailingStop': 4, 'sellPercent': 4
+        }
+
+        for field, precision in numeric_fields.items():
+            if field in strategy_data:
+                strategy_data[field] = round(float(strategy_data[field]), precision)
+
+        # Process stop levels
+        if 'stopLevels' in strategy_data:
+            for level in strategy_data['stopLevels']:
+                level['increase'] = round(float(level['increase']), 4)
+                level['sell'] = round(float(level['sell']), 4)
+                level['position'] = round(float(level['position']), 4)
+
+        # Process fee settings
+        for setting in ['jitoSettings', 'antiSandwichSettings']:
+            if setting in strategy_data and 'fee' in strategy_data[setting]:
+                strategy_data[setting]['fee'] = round(float(strategy_data[setting]['fee']), 6)
+
+        strategy = strategy_manager.add_or_update_strategy(strategy_data)
+        action = "更新" if 'id' in strategy_data else "创建"
+        log_manager.add_log("INFO", f"{action}策略成功: {strategy['name']}")
+        return jsonify(strategy)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"保存策略失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/strategies/<int:strategy_id>', methods=['DELETE'])
+def delete_strategy(strategy_id):
+    try:
+        if strategy_manager.remove_strategy(strategy_id):
+            log_manager.add_log("INFO", f"删除策略成功: ID={strategy_id}")
+            return jsonify({"success": True})
+        return jsonify({"error": "Strategy not found"}), 404
+    except Exception as e:
+        log_manager.add_log("ERROR", f"删除策略失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/strategies/<int:strategy_id>/activate', methods=['POST'])
+def activate_strategy(strategy_id):
+    try:
+        if strategy_manager.activate_template(strategy_id):
+            log_manager.add_log("INFO", f"激活策略模板: ID={strategy_id}")
+            return jsonify({"success": True})
+        return jsonify({"error": "Strategy already active"}), 400
+    except Exception as e:
+        log_manager.add_log("ERROR", f"激活策略模板失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/strategies/<int:strategy_id>/deactivate', methods=['POST'])
+def deactivate_strategy(strategy_id):
+    try:
+        if strategy_manager.deactivate_template(strategy_id):
+            log_manager.add_log("INFO", f"停用策略模板: ID={strategy_id}")
+            return jsonify({"success": True})
+        return jsonify({"error": "Strategy not active"}), 400
+    except Exception as e:
+        log_manager.add_log("ERROR", f"停用策略模板失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/strategies/status', methods=['GET'])
+def get_strategy_status():
+    try:
+        return jsonify({
+            "activeTemplates": strategy_manager.active_templates
+        })
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取策略状态失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# Task Management API
+@app.route('/api/tasks', methods=['GET'])
+def get_tasks():
+    try:
+        strategy_id = request.args.get('strategyId')
+        if strategy_id:
+            tasks = [task for task in task_manager.get_tasks()
+                     if task['strategyId'] == int(strategy_id)]
+        else:
+            tasks = task_manager.get_tasks()
+        return jsonify(tasks)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取任务列表失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/api/tasks', methods=['POST'])
+# def create_task():
+#     try:
+#         data = request.json
+#         strategy_id = data.get("strategyId")
+#         contract_address = data.get("contractAddress")
+#         type_id = data.get("typeId")
+#
+#         # Check if strategy exists
+#         strategy = next((s for s in strategy_manager.strategies if s["id"] == strategy_id), None)
+#         if not strategy:
+#             log_manager.add_log("ERROR", f"创建任务失败: 策略不存在 ID={strategy_id}")
+#             return jsonify({"error": "Strategy not found"}), 404
+#
+#         task = task_manager.create_task(
+#             strategy_id=strategy_id,
+#             strategy_name=strategy["name"],
+#             contract_address=contract_address,
+#             type_id=type_id
+#         )
+#
+#         log_manager.add_log("INFO", f"创建任务成功: {strategy['name']}")
+#         return jsonify(task)
+#     except Exception as e:
+#         log_manager.add_log("ERROR", f"创建任务失败: {str(e)}")
+#         return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/api/tasks/<task_id>/stop', methods=['POST'])
+# def stop_task(task_id):
+#     try:
+#         if task_manager.stop_task(task_id):
+#             log_manager.add_log("INFO", f"停止任务成功: ID={task_id}")
+#             return jsonify({"success": True})
+#         log_manager.add_log("ERROR", f"停止任务失败: 任务不存在 ID={task_id}")
+#         return jsonify({"error": "Task not found"}), 404
+#     except Exception as e:
+#         log_manager.add_log("ERROR", f"停止任务失败: {str(e)}")
+#         return jsonify({"error": str(e)}), 500
+
+
+# Type Management API
 @app.route('/api/types', methods=['GET'])
 def get_types():
-    return jsonify(mock_types)
+    try:
+        types = storage.load_json('types.json', default=[])
+        sorted_types = sorted(types, key=lambda x: x['id'])
+        return jsonify(sorted_types)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取类型列表失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/types', methods=['POST'])
 def add_type():
-    type_data = request.json
-    type_id = type_data.get("id")
-    name = type_data.get("name")
-
-    # 验证类型ID是否为整数
     try:
-        type_id = int(type_id)
-    except (ValueError, TypeError):
-        return jsonify({"error": "类型ID必须为整数"}), 400
+        type_data = request.json
 
-    # 检查ID是否已存在
-    if any(t["id"] == type_id for t in mock_types):
-        return jsonify({"error": "类型ID已存在"}), 400
+        if 'id' not in type_data or 'name' not in type_data:
+            return jsonify({"error": "Missing required fields: id and name"}), 400
 
-    new_type = {
-        "id": type_id,
-        "name": name
-    }
-    mock_types.append(new_type)
-    return jsonify(new_type)
+        if not isinstance(type_data['id'], int) or type_data['id'] <= 0:
+            return jsonify({"error": "Type ID must be a positive integer"}), 400
+
+        existing_types = storage.load_json('types.json', default=[])
+        if any(t['id'] == type_data['id'] for t in existing_types):
+            return jsonify({"error": "Type ID already exists"}), 400
+
+        new_type = {
+            "id": type_data['id'],
+            "name": type_data['name']
+        }
+        existing_types.append(new_type)
+        storage.save_json('types.json', existing_types)
+
+        log_manager.add_log("INFO", f"添加类型成功: ID={new_type['id']}, 名称={new_type['name']}")
+        return jsonify(new_type)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"添加类型失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/types/<type_id>', methods=['DELETE'])
+@app.route('/api/types/<int:type_id>', methods=['DELETE'])
 def delete_type(type_id):
-    global mock_types
-    mock_types = [t for t in mock_types if t["id"] != type_id]
-    # 同时更新所有策略中的类型选择
-    for strategy in mock_strategies:
-        strategy["selectedTypes"] = [t for t in strategy["selectedTypes"] if t != type_id]
-    return jsonify({"success": True})
+    try:
+        types = storage.load_json('types.json', default=[])
+        initial_count = len(types)
+        types = [t for t in types if t['id'] != type_id]
+
+        if len(types) == initial_count:
+            return jsonify({"error": "Type not found"}), 404
+
+        storage.save_json('types.json', types)
+        log_manager.add_log("INFO", f"删除类型成功: ID={type_id}")
+        return jsonify({"success": True})
+    except Exception as e:
+        log_manager.add_log("ERROR", f"删除类型失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
-# 日志API
+# Log Management API
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
-    return jsonify(mock_logs)
+    try:
+        logs = log_manager.get_logs()
+        return jsonify(logs[-1000:] if len(logs) > 1000 else logs)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/logs', methods=['POST'])
 def add_log():
-    log_data = request.json
-    log_entry = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "level": log_data.get("level", "INFO"),
-        "message": log_data["message"]
-    }
-    mock_logs.append(log_entry)
-    # 保持日志不超过1000条
-    if len(mock_logs) > 1000:
-        mock_logs.pop(0)
-    return jsonify(log_entry)
+    try:
+        log_data = request.json
+        log = log_manager.add_log(
+            level=log_data.get("level", "INFO"),
+            message=log_data["message"]
+        )
+        return jsonify(log)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-# 错误处理
+@app.route('/api/logs', methods=['DELETE'])
+def clear_logs():
+    try:
+        log_manager.clear_logs()
+        log_manager.add_log("INFO", "清除所有日志")
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/auto-tasks', methods=['POST'])
+def create_auto_task():
+    try:
+        data = request.json
+        contract_address = data.get('ca')
+        type_id = data.get('type_id')
+
+        if not contract_address or not type_id:
+            return jsonify({
+                "success": False,
+                "message": "Missing required parameters",
+                "details": {
+                    "contract_address": "Missing" if not contract_address else "Present",
+                    "type_id": "Missing" if not type_id else "Present"
+                }
+            }), 400
+
+        # Check for existing tasks for this contract address
+        # existing_tasks = task_manager.get_tasks_by_contract(contract_address)
+        # if existing_tasks:
+        #     return jsonify({
+        #         "success": False,
+        #         "message": "Task already exists for this contract",
+        #         "details": {
+        #             "existing_tasks": [
+        #                 {
+        #                     "task_id": task["id"],
+        #                     "strategy_name": task["strategyName"],
+        #                     "start_time": task["startTime"]
+        #                 } for task in existing_tasks
+        #             ]
+        #         }
+        #     }), 409
+
+        # Find active strategies that match the type_id
+        matching_templates = strategy_manager.get_matching_templates(type_id)
+
+        if not matching_templates:
+            return jsonify({
+                "success": False,
+                "message": "No active strategies found for this type",
+                "details": {
+                    "type_id": type_id,
+                    "active_strategies_count": len(strategy_manager.get_active_templates()),
+                    "total_strategies_count": len(strategy_manager.strategies)
+                }
+            }), 404
+
+        # Create tasks for matching templates
+        created_tasks = []
+        for template in matching_templates:
+            task = task_manager.create_task(
+                strategy_id=template['id'],
+                strategy_name=template['name'],
+                contract_address=contract_address,
+                type_id=type_id
+            )
+            created_tasks.append({
+                "task_id": task["id"],
+                "strategy_name": task["strategyName"],
+                "contract_address": task["contractAddress"],
+                "start_time": task["startTime"],
+                "status": task["status"]
+            })
+
+            log_manager.add_log(
+                "INFO",
+                f"自动创建任务成功: 策略={template['name']}, 合约={contract_address}, 类型={type_id}"
+            )
+
+        return jsonify({
+            "success": True,
+            "message": f"Successfully created {len(created_tasks)} tasks",
+            "details": {
+                "contract_address": contract_address,
+                "type_id": type_id,
+                "created_tasks": created_tasks,
+                "matching_strategies": [
+                    {
+                        "id": template["id"],
+                        "name": template["name"]
+                    } for template in matching_templates
+                ]
+            }
+        })
+
+    except Exception as e:
+        log_manager.add_log("ERROR", f"自动创建任务失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": "Failed to create auto tasks",
+            "details": {
+                "error": str(e)
+            }
+        }), 500
+
+
+# Error Handlers
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'Not found'}), 404
@@ -360,5 +456,180 @@ def server_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 
+# Health Check Endpoint
+@app.route('/health')
+def health_check():
+    try:
+        # Check all critical components
+        storage.load_json('settings.json')
+        strategy_manager.load_strategies()
+        task_manager.load_tasks()
+        wallet_manager.load_wallets()
+
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+
+# Strategy Statistics API
+@app.route('/api/strategies/stats', methods=['GET'])
+def get_strategy_stats():
+    try:
+        stats = {
+            'total': len(strategy_manager.strategies),
+            'active': len(strategy_manager.active_templates),
+            'types': {},
+            'wallets': {}
+        }
+
+        # Count strategies by type
+        for strategy in strategy_manager.strategies:
+            for type_id in strategy.get('selectedTypes', []):
+                stats['types'][type_id] = stats['types'].get(type_id, 0) + 1
+
+        # Count strategies by wallet
+        for strategy in strategy_manager.strategies:
+            for wallet in strategy.get('selectedWallets', []):
+                stats['wallets'][wallet] = stats['wallets'].get(wallet, 0) + 1
+
+        return jsonify(stats)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取策略统计失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# Task Statistics API
+@app.route('/api/tasks/stats', methods=['GET'])
+def get_task_stats():
+    try:
+        all_tasks = task_manager.get_tasks()
+        stats = {
+            'total': len(all_tasks),
+            'running': len([t for t in all_tasks if t['status'] == 'running']),
+            'stopped': len([t for t in all_tasks if t['status'] == 'stopped']),
+            'by_strategy': {},
+            'by_type': {}
+        }
+
+        # Count tasks by strategy
+        for task in all_tasks:
+            strategy_id = task.get('strategyId')
+            if strategy_id:
+                stats['by_strategy'][strategy_id] = stats['by_strategy'].get(strategy_id, 0) + 1
+
+        # Count tasks by type
+        for task in all_tasks:
+            type_id = task.get('typeId')
+            if type_id:
+                stats['by_type'][type_id] = stats['by_type'].get(type_id, 0) + 1
+
+        return jsonify(stats)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"获取任务统计失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# Batch Operations API
+@app.route('/api/tasks/batch/stop', methods=['POST'])
+def stop_tasks_batch():
+    try:
+        data = request.json
+        task_ids = data.get('taskIds', [])
+
+        if not task_ids:
+            return jsonify({"error": "No task IDs provided"}), 400
+
+        results = {
+            'success': [],
+            'failed': []
+        }
+
+        for task_id in task_ids:
+            try:
+                if task_manager.stop_task(task_id):
+                    results['success'].append(task_id)
+                    log_manager.add_log("INFO", f"批量停止任务成功: ID={task_id}")
+                else:
+                    results['failed'].append({"id": task_id, "reason": "Task not found"})
+            except Exception as e:
+                results['failed'].append({"id": task_id, "reason": str(e)})
+
+        return jsonify(results)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"批量停止任务失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/strategies/batch/activate', methods=['POST'])
+def activate_strategies_batch():
+    try:
+        data = request.json
+        strategy_ids = data.get('strategyIds', [])
+
+        if not strategy_ids:
+            return jsonify({"error": "No strategy IDs provided"}), 400
+
+        results = {
+            'success': [],
+            'failed': []
+        }
+
+        for strategy_id in strategy_ids:
+            try:
+                if strategy_manager.activate_template(strategy_id):
+                    results['success'].append(strategy_id)
+                    log_manager.add_log("INFO", f"批量激活策略成功: ID={strategy_id}")
+                else:
+                    results['failed'].append({"id": strategy_id, "reason": "Already active"})
+            except Exception as e:
+                results['failed'].append({"id": strategy_id, "reason": str(e)})
+
+        return jsonify(results)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"批量激活策略失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/strategies/batch/deactivate', methods=['POST'])
+def deactivate_strategies_batch():
+    try:
+        data = request.json
+        strategy_ids = data.get('strategyIds', [])
+
+        if not strategy_ids:
+            return jsonify({"error": "No strategy IDs provided"}), 400
+
+        results = {
+            'success': [],
+            'failed': []
+        }
+
+        for strategy_id in strategy_ids:
+            try:
+                if strategy_manager.deactivate_template(strategy_id):
+                    results['success'].append(strategy_id)
+                    log_manager.add_log("INFO", f"批量停用策略成功: ID={strategy_id}")
+                else:
+                    results['failed'].append({"id": strategy_id, "reason": "Not active"})
+            except Exception as e:
+                results['failed'].append({"id": strategy_id, "reason": str(e)})
+
+        return jsonify(results)
+    except Exception as e:
+        log_manager.add_log("ERROR", f"批量停用策略失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
+    # Ensure data directory exists
+    if not os.path.exists('data'):
+        os.makedirs('data')
+
     app.run(debug=True, port=2000, host='0.0.0.0')
