@@ -226,21 +226,16 @@ class TaskExecutor:
 
                     self.log('INFO', f'钱包 {wallet_pubkey} entry_price 为：{entry_price}')
 
-                    entry_price = buy_amount_sol / amount / 10
+                    entry_price = buy_amount_sol / amount
 
                     token_amount = 0
                     for _ in range(20):
-<<<<<<< HEAD
-                        # await asyncio.sleep(120 / self.max_retry)
-                        await asyncio.sleep(1)
-                        try:
-                            token_amount = await self.get_token_balance(task['contractAddress'], wallet_key)
-=======
+
                         await asyncio.sleep(1)
                         try:
                             token_amount = await self.get_token_balance(task['contractAddress'], wallet_key)
                             # token_amount = amount
->>>>>>> 4fa1be4 (.)
+
                         except Exception as e:
                             print('查询价格失败：' + str(e))
                             pass
@@ -248,11 +243,10 @@ class TaskExecutor:
                         if token_amount > 10: break
 
                     if token_amount != 0:
-<<<<<<< HEAD
                         entry_price = buy_amount_sol / token_amount
-=======
-                        entry_price = buy_amount_sol / token_amount / 10
->>>>>>> 4fa1be4 (.)
+
+                        entry_price = buy_amount_sol / token_amount
+
                     else:
                         self.log('ERROR', f'长时间没有检测到买入的钱包的余额 wallet: {wallet_pubkey} ca:{task["contractAddress"]}')
 
@@ -342,13 +336,13 @@ class TaskExecutor:
 
             self.log("INFO", f'task id: {task["id"]} 开始持久化监控token：{task["contractAddress"]} entry_price: {entry_price}\tamount:{amount}')
 
-<<<<<<< HEAD
+
             # while 1:
             #     current_price, quote_data = await self._get_current_price_real(task['contractAddress'], amount)
             #     print(current_price)
 
-=======
->>>>>>> 4fa1be4 (.)
+
+
             # 开始价格监控循环
             while (not stop_event.is_set() and any(state['token_balance'] > 1 for state in wallet_states.values()) and
                    any(len(state['triggered_levels']) != len(state['levels']) for state in wallet_states.values())):
@@ -482,13 +476,13 @@ class TaskExecutor:
 
         # Only attempt to join if we're not in the same thread
         thread = self.active_tasks[task_id]
-<<<<<<< HEAD
+
         # if thread != Thread.current_thread():
         #     thread.join(timeout=2.0)
         #     if thread.is_alive():
         #         self.log("WARNING", f"警告: 任务 {task_id} 未能正常停止")
-=======
->>>>>>> 4fa1be4 (.)
+
+
 
         # Clean up regardless of join status
         del self.active_tasks[task_id]
