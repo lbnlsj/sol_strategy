@@ -56,8 +56,12 @@ class PriceSwapManager:
         self.jito_client = None
 
     async def _init_jito_client(self):
+        rpc_url = self.settings_manager.settings.get(
+            "jitoRpcUrl",
+            "https://jito-api.mainnet-beta.solana.com"
+        )
         if not self.jito_client:
-            self.jito_client = JitoJsonRpcSDK("https://mainnet.block-engine.jito.wtf/api/v1")
+            self.jito_client = JitoJsonRpcSDK(rpc_url + "/api/v1")
         return self.jito_client
 
     async def check_transaction_status(self, client: AsyncClient, signature_str: str) -> bool:
@@ -127,7 +131,7 @@ class PriceSwapManager:
                 output_mint=output_mint,
                 amount=amount_lamports,
                 # slippage_bps=slippage_bps
-                slippage_bps=100
+                slippage_bps=10000
             )
 
             if 'error' in quote_response:
