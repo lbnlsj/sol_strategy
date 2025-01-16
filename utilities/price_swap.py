@@ -530,6 +530,7 @@ class PriceSwapManager:
                     continue
 
             # Fallback to Jupiter quote if no valid swap transactions found
+            await asyncio.sleep(2)
             return await self.get_current_price1(input_mint, output_mint, amount, slippage_bps)
 
         except Exception as e:
@@ -557,7 +558,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "56vsuzs2KJJsrN7noYxo8MMZE1qjENcd3QQhJ5qSpump"
+        test_token = "HDADXQKfJzbbQrdbWgvbNxWxajBmeirjnKWdSLSedEyC"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 
