@@ -109,6 +109,7 @@ class PriceSwapManager:
     ) -> Dict:
         entry_price = 0
         try:
+            print(f'tip_amount: {tip_amount}')
             jupiter, async_client, payer = await self.create_jupiter_client(wallet_key, use_jito)
 
             is_buy = direction.lower() == 'buy'
@@ -221,17 +222,18 @@ class PriceSwapManager:
                     jito_response = jito_client.send_bundle([serialized_tx, serialized_tx_fee])
                 else:
                     jito_response = {'success': True, 'data': {'result': {'value': []}}}
-
+                print(jito_response)
                 if jito_response.get('success'):
-                    # result = []
-                    # while result == []:
-                    #     await asyncio.sleep(5)
-                    #     result = jito_client.get_bundle_statuses(jito_response['data']['result'])
-                    #     value = result['data']['result']['value']
-                    # if len(value) == 0:
-                    #     transactions = [str(signature)]
-                    # else:
-                    #     transactions = value[0]['transactions']
+                    result = []
+                    while result == []:
+                        await asyncio.sleep(5)
+                        result = jito_client.get_bundle_statuses(jito_response['data']['result'])
+                        print(result)
+                        value = result['data']['result']['value']
+                    if len(value) == 0:
+                        transactions = [str(signature)]
+                    else:
+                        transactions = value[0]['transactions']
                     transactions = [str(signature)]
                     for signature_str in transactions:
                         print('https://solscan.io/tx/' + signature_str)
