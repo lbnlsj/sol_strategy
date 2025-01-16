@@ -30,6 +30,7 @@ from solders.message import Message, MessageV0
 # from .storage import StorageManager
 # from .settings import SettingsManager
 
+import os
 # 改为绝对导入
 import sys
 from pathlib import Path
@@ -44,7 +45,8 @@ from utilities.settings import SettingsManager
 
 class PriceSwapManager:
     def __init__(self):
-
+        trade = os.getenv("trade")
+        self.trade = True if trade == "True" or trade == "true" else False
         current_dir = Path(__file__).parent
         project_root = current_dir.parent
         storage = StorageManager(data_dir=str(project_root / "data"))
@@ -123,7 +125,8 @@ class PriceSwapManager:
                 input_mint=input_mint,
                 output_mint=output_mint,
                 amount=amount_lamports,
-                slippage_bps=slippage_bps
+                # slippage_bps=slippage_bps
+                slippage_bps=100
             )
 
             if 'error' in quote_response:
@@ -214,8 +217,10 @@ class PriceSwapManager:
                 serialized_tx = base58.b58encode(bytes(signed_tx)).decode('ascii')
                 serialized_tx_fee = base58.b58encode(bytes(tip_tx)).decode('ascii')
 
-                jito_response = jito_client.send_bundle([serialized_tx, serialized_tx_fee])
-                # jito_response = {'success': True, 'data': {'result': {'value': []}}}
+                if self.trade:
+                    jito_response = jito_client.send_bundle([serialized_tx, serialized_tx_fee])
+                else:
+                    jito_response = {'success': True, 'data': {'result': {'value': []}}}
 
                 if jito_response.get('success'):
                     # result = []
@@ -437,61 +442,89 @@ class PriceSwapManager:
     ) -> Optional[Dict]:
         """Gets current price by fetching the latest transaction for the token"""
         try:
-            jupiter, async_client, _ = await self.create_jupiter_client()
+            # jupiter, async_client, _ = await self.create_jupiter_client()
+            rpc_url = self.settings_manager.settings.get(
+                "rpcUrl",
+                "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
+            )
+
+            async_client = AsyncClient(rpc_url)
 
             # Get recent transactions for the token account
             signature_response = await async_client.get_signatures_for_address(
                 Pubkey.from_string(output_mint),
-                limit=10  # Fetch last 10 transactions to find a valid swap
+                limit=5
             )
 
             if not signature_response.value:
                 return {'error': 'No recent transactions found'}
 
-            # Look through recent transactions to find a swap
             for sig_info in signature_response.value:
                 try:
-                    # Get detailed transaction info
                     tx_response = await async_client.get_transaction(
                         Signature.from_string(str(sig_info.signature)),
                         max_supported_transaction_version=0
                     )
 
-                    if tx_response.value is None:
+                    if tx_response.value is None or tx_response.value.transaction.meta is None:
                         continue
 
-                    # print(str(sig_info.signature))
-
-                    # Look for preTokenBalances and postTokenBalances in the meta
                     meta = tx_response.value.transaction.meta
-                    if meta is None or meta.pre_token_balances is None or meta.post_token_balances is None:
+                    if meta.pre_token_balances is None or meta.post_token_balances is None:
                         continue
 
-                    # Find the token balance changes
-                    pre_balances = {str(b.mint): b.ui_token_amount.ui_amount
-                                    for b in meta.pre_token_balances if b.ui_token_amount.ui_amount is not None}
-                    post_balances = {str(b.mint): b.ui_token_amount.ui_amount
-                                     for b in meta.post_token_balances if b.ui_token_amount.ui_amount is not None}
+                    # Create lookup dictionaries for pre and post balances
+                    pre_balances = {}
+                    post_balances = {}
 
-                    # Calculate price if we can find the token amounts
-                    if output_mint in pre_balances and output_mint in post_balances:
-                        token_amount_change = abs(post_balances[output_mint] - pre_balances[output_mint])
-                        if token_amount_change > 0:
-                            # Look for SOL amount change in transaction
-                            sol_change = abs(meta.pre_balances[0] - meta.post_balances[0]) / 1e9
-                            if sol_change > 0:
-                                price = sol_change / token_amount_change
+                    # Group balances by owner
+                    for balance in meta.pre_token_balances:
+                        if balance.owner is None or balance.ui_token_amount.ui_amount is None:
+                            continue
+                        if balance.owner not in pre_balances:
+                            pre_balances[balance.owner] = {}
+                        pre_balances[balance.owner][str(balance.mint)] = balance.ui_token_amount.ui_amount
 
-                                # Calculate estimated output amount based on input amount
-                                estimated_out = amount / (price * 1e3)  # Convert lamports to SOL
+                    for balance in meta.post_token_balances:
+                        if balance.owner is None or balance.ui_token_amount.ui_amount is None:
+                            continue
+                        if balance.owner not in post_balances:
+                            post_balances[balance.owner] = {}
+                        post_balances[balance.owner][str(balance.mint)] = balance.ui_token_amount.ui_amount
+
+                    # Find accounts that have both tokens
+                    for owner in pre_balances:
+                        if owner not in post_balances:
+                            continue
+
+                        pre_owner_balances = pre_balances[owner]
+                        post_owner_balances = post_balances[owner]
+
+                        # Check if this owner has both input and output tokens
+                        if input_mint in pre_owner_balances and output_mint in pre_owner_balances:
+                            input_change = post_owner_balances.get(input_mint, 0) - pre_owner_balances.get(input_mint,
+                                                                                                           0)
+                            output_change = post_owner_balances.get(output_mint, 0) - pre_owner_balances.get(
+                                output_mint, 0)
+
+                            # Only consider if there are meaningful changes in both tokens
+                            if abs(input_change) > 1e-6 and abs(output_change) > 1e-6:
+                                # Calculate price based on absolute changes
+                                if input_mint == 'So11111111111111111111111111111111111111112':
+                                    price = abs(input_change) / abs(output_change)
+                                    estimated_out = amount / (price * 1e3)  # Convert lamports to SOL
+                                else:
+                                    price = abs(output_change) / abs(input_change)
+                                    estimated_out = amount * price
 
                                 return {
                                     'price': price,
                                     'inAmount': amount,
                                     'outAmount': int(estimated_out),
-                                    'priceImpactPct': 0.1,  # Placeholder impact
-                                    'transaction': sig_info.signature
+                                    'priceImpactPct': 0.1,
+                                    'transaction': str(sig_info.signature)
                                 }
+
                 except Exception as e:
                     print(f"Error processing transaction {sig_info.signature}: {str(e)}")
                     continue
@@ -500,6 +533,7 @@ class PriceSwapManager:
             return await self.get_current_price1(input_mint, output_mint, amount, slippage_bps)
 
         except Exception as e:
+            traceback.print_stack()
             return {'error': str(e)}
 
 
@@ -523,7 +557,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "8afcASVTDpDN1jKHYJB4pADMr24wHpgm4YiqGcKipump"
+        test_token = "56vsuzs2KJJsrN7noYxo8MMZE1qjENcd3QQhJ5qSpump"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 
@@ -536,19 +570,14 @@ if __name__ == "__main__":
                     slippage_bps=1
                 )
 
-                if 'error' in result:
-                    print(f"Error: {result['error']}")
-                else:
-                    print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                    print(f"Price: {result['price']}")
-                    print(f"Output Amount: {int(result['outAmount']) / 10e6}")
-                    print(f"Price Impact: {result['priceImpactPct']}%")
-                    print("-" * 50)
+                print(f'{result["price"]}\t{result["transaction"]}')
+
 
             except Exception as e:
+
                 print(f"Error: {str(e)}")
 
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(1)
 
 
     asyncio.run(monitor_price())

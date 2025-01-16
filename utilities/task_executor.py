@@ -18,7 +18,9 @@ class TaskExecutor:
         self.storage_manager = storage_manager
         self.log_manager = log_manager
         debug = os.getenv("DEBUG")
+        trade = os.getenv("trade")
         self.debug = True if debug == "True" or debug == "true" else False
+        self.trade = True if trade == "True" or trade == "true" else False
         self.active_tasks = {}  # task_id -> Thread
         self.stop_events = {}  # task_id -> Event
         self.max_retry = int(os.getenv('MAX_RETRY'))
@@ -224,17 +226,17 @@ class TaskExecutor:
                         quota_data
                     )
 
-                    self.log('INFO', f'钱包 {wallet_pubkey} entry_price 为：{entry_price}')
-
-                    entry_price = buy_amount_sol / amount
+                    entry_price = buy_amount_sol / amount / 10
 
                     token_amount = 0
                     for _ in range(20):
 
                         await asyncio.sleep(1)
                         try:
-                            token_amount = await self.get_token_balance(task['contractAddress'], wallet_key)
-                            # token_amount = amount
+                            if self.trade:
+                                token_amount = await self.get_token_balance(task['contractAddress'], wallet_key)
+                            else:
+                                token_amount = amount * 10
 
                         except Exception as e:
                             print('查询价格失败：' + str(e))
@@ -245,11 +247,10 @@ class TaskExecutor:
                     if token_amount != 0:
                         entry_price = buy_amount_sol / token_amount
 
-                        entry_price = buy_amount_sol / token_amount
-
                     else:
                         self.log('ERROR', f'长时间没有检测到买入的钱包的余额 wallet: {wallet_pubkey} ca:{task["contractAddress"]}')
 
+                    self.log('INFO', f'钱包 {wallet_pubkey} entry_price 为：{entry_price}')
                     return {
                         'wallet_key': wallet_key,
                         'state': {
@@ -336,13 +337,6 @@ class TaskExecutor:
 
             self.log("INFO", f'task id: {task["id"]} 开始持久化监控token：{task["contractAddress"]} entry_price: {entry_price}\tamount:{amount}')
 
-
-            # while 1:
-            #     current_price, quote_data = await self._get_current_price_real(task['contractAddress'], amount)
-            #     print(current_price)
-
-
-
             # 开始价格监控循环
             while (not stop_event.is_set() and any(state['token_balance'] > 1 for state in wallet_states.values()) and
                    any(len(state['triggered_levels']) != len(state['levels']) for state in wallet_states.values())):
@@ -359,7 +353,7 @@ class TaskExecutor:
                 # 新增
                 if last_price != 0 and abs((current_price - last_price) / last_price) >= 0.5:
                     last_price = 0
-                    print('价格波动过大，重新检测')
+                    print(f'价格波动过大，重新检测 {last_price}')
                     time.sleep(1)
                     continue
                 else:
@@ -399,7 +393,7 @@ class TaskExecutor:
                 # if not self.debug:
                 #     await asyncio.sleep(2)  # 主循环的延迟
 
-                await asyncio.sleep(0.02)  # 主循环的延迟
+                await asyncio.sleep(0.1)  # 主循环的延迟
 
             self.log("INFO", f'task id: {task["id"]} stop_event.is_set: {stop_event.is_set()}\t')
             return True
