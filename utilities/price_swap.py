@@ -167,8 +167,10 @@ class PriceSwapManager:
                 # Add Jito tip transaction if specified
                 tip_amount = random.uniform(0.0001, 0.02) if not tip_amount else tip_amount
                 tip_lamports = int(tip_amount * 1_000_000_000)  # Convert to lamports
-                # tip_account = self.jito_client.get_tip_accounts()
-                tip_account = '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5'
+                # tip_accounts = self.jito_client.get_tip_accounts()
+                tip_accounts = ['DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL', 'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt', '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5', 'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY', 'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh', 'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe', 'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49', '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT']
+                tip_account = random.choice(tip_accounts)
+                # tip_account = '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5'
                 tip_pubkey = Pubkey.from_string(tip_account)
 
                 # Create tip instruction
