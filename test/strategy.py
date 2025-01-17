@@ -10,7 +10,7 @@ host = '127.0.0.1'
 BASE_URL = f'http://{host}:' + os.getenv('PORT')
 
 data = {
-    'ca': '6V2RjL6GViRoGokLpCMnDA9Mx67Rj2b837A49QHrpump',
+    'ca': 'DdCwDx9o1aYqYyQqwoiUkpXFZEmvJseaUUjxdwKDpump',
     'type_id': 2
 }
 
