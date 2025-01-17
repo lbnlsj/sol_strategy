@@ -351,13 +351,13 @@ class TaskExecutor:
                     continue
 
                 # 新增
-                if last_price != 0 and abs((current_price - last_price) / last_price) >= 0.5:
-                    last_price = 0
-                    print(f'价格波动过大，重新检测 {last_price}')
-                    time.sleep(1)
-                    continue
-                else:
-                    last_price = current_price
+                # if last_price != 0 and abs((current_price - last_price) / last_price) >= 0.5:
+                #     last_price = 0
+                #     print(f'价格波动过大，重新检测 {last_price}')
+                #     time.sleep(1)
+                #     continue
+                # else:
+                #     last_price = current_price
 
                 # 创建所有钱包的任务
                 tasks = [
