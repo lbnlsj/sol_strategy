@@ -392,7 +392,7 @@ class TaskExecutor:
                 # if not self.debug:
                 #     await asyncio.sleep(2)  # 主循环的延迟
 
-                await asyncio.sleep(0.1)  # 主循环的延迟
+                await asyncio.sleep(0.5)  # 主循环的延迟
 
             self.log("INFO", f'task id: {task["id"]} stop_event.is_set: {stop_event.is_set()}\t')
             return True
