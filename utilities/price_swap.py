@@ -437,6 +437,7 @@ class PriceSwapManager:
                 try:
                     tx_response = await async_client.get_transaction(
                         Signature.from_string(str(sig_info.signature)),
+                        # Signature.from_string('44JqiuiJ8gkcoUYni7MS5eHi68JdXRjoNqAsVvU98qiHQh3xydyhTBEghYw1hm3dsy2s4Wk4h2Xfx9nF7gVzecVd'),
                         max_supported_transaction_version=0
                     )
 
@@ -479,12 +480,15 @@ class PriceSwapManager:
                         # Check if this owner has both input and output tokens
                         # if input_mint in pre_owner_balances and output_mint in pre_owner_balances:
                         if token_mint in [*post_owner_balances.keys()]:
-                            input_change = post_owner_balances.get(input_mint, 0) - pre_owner_balances.get(input_mint,
-                                                                                                           0)
-                            output_change = post_owner_balances.get(output_mint, 0) - pre_owner_balances.get(
-                                output_mint, 0)
-
-                            token_change = max(input_change, output_change)
+                            # input_change = post_owner_balances.get(input_mint, 0) - pre_owner_balances.get(input_mint,
+                            #                                                                                0)
+                            # output_change = post_owner_balances.get(output_mint, 0) - pre_owner_balances.get(
+                            #     output_mint, 0)
+                            #
+                            # token_change = max(input_change, output_change)
+                            token_change = max([
+                                abs(meta.post_token_balances[inx].ui_token_amount.ui_amount - meta.pre_token_balances[inx].ui_token_amount.ui_amount) for inx, d in enumerate(meta.pre_token_balances) if meta.pre_token_balances[inx].ui_token_amount.ui_amount
+                            ])
                             sol_change = sorted([
                                 abs(meta.post_balances[inx] - meta.pre_balances[inx]) for inx, d in enumerate(meta.post_balances) if 3 < meta.pre_balances[inx]
                             ])[-2]
@@ -540,7 +544,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "4bRWiDY2xyWCLBGdEWzq5ayWQyqr3dH3gGZVxxSypump"
+        test_token = "4UEz9SwRgTz3Hb7EE7afPqMHeSPQfftVSXL1tV946Ci5"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 
