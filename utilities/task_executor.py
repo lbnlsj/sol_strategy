@@ -226,7 +226,7 @@ class TaskExecutor:
                         quota_data
                     )
 
-                    entry_price = buy_amount_sol / amount / 10
+                    entry_price = buy_amount_sol / amount
 
                     token_amount = 0
                     for _ in range(20):
