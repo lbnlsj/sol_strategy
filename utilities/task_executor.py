@@ -291,10 +291,11 @@ class TaskExecutor:
                            for w in self.storage_manager.load_json('wallets.json', default=[])
                            if w['address'] in strategy['selectedWallets']]
 
-            current_price, quote_data = await self._get_current_price_real(task['contractAddress'])
+            quote_data = {}
 
             # 使用私钥创建初始化任务
             init_tasks = [asyncio.create_task(initialize_wallet(wallet_key, quote_data)) for wallet_key in wallet_keys]
+            # current_price, quote_data = await self._get_current_price_real(task['contractAddress'])
 
             # 等待钱包初始化，设置超时
             try:
