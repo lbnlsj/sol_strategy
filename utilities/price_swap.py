@@ -518,6 +518,8 @@ class PriceSwapManager:
                                     estimated_out = amount * price
 
                                 print(f"{price} {str(sig_info.signature)}")
+                                print(pre_owner_balances)
+                                print(post_owner_balances)
 
                                 return {
                                     'price': price,
