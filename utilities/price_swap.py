@@ -495,7 +495,7 @@ class PriceSwapManager:
                                 # Calculate price based on absolute changes
                                 price = abs(sol_change / 1e9) / abs(token_change)
 
-                                # print(f"{price} {str(sig_info.signature)}")
+                                print(f"{price} {str(sig_info.signature)}")
                                 # print(pre_owner_balances)
                                 # print(post_owner_balances)
 
