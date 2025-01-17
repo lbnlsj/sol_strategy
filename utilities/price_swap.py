@@ -407,29 +407,6 @@ class PriceSwapManager:
         )
         return jupiter, async_client, payer
 
-    async def get_current_price1(
-            self,
-            input_mint: str,
-            output_mint: str,
-
-            amount: int,
-            slippage_bps: int = 100
-    ) -> Optional[Dict]:
-        try:
-            jupiter, async_client, _ = await self.create_jupiter_client()
-            quote_data = await jupiter.quote(
-                input_mint=input_mint,
-                output_mint=output_mint,
-                amount=amount,
-                slippage_bps=slippage_bps
-            )
-
-            quote_data['price'] = (int(quote_data['inAmount']) / 10e9) / (int(quote_data['outAmount']) / 10e6)
-            return quote_data
-        except Exception as e:
-            # self.logger.error(f"获取价格失败: {str(e)}")
-            return {'error': str(e)}
-
     async def get_current_price(
             self,
             input_mint: str,
@@ -439,7 +416,7 @@ class PriceSwapManager:
     ) -> Optional[Dict]:
         """Gets current price by fetching the latest transaction for the token"""
         try:
-            print(f'input_mint {input_mint}\t {output_mint}')
+            # print(f'input_mint {input_mint}\t {output_mint}')
             rpc_url = self.settings_manager.settings.get(
                 "rpcUrl",
                 "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
@@ -507,24 +484,25 @@ class PriceSwapManager:
                             output_change = post_owner_balances.get(output_mint, 0) - pre_owner_balances.get(
                                 output_mint, 0)
 
-                            # Only consider if there are meaningful changes in both tokens
-                            if abs(input_change) > 1e-6 and abs(output_change) > 1e-6:
-                                # Calculate price based on absolute changes
-                                if input_mint == 'So11111111111111111111111111111111111111112':
-                                    price = abs(input_change) / abs(output_change)
-                                    estimated_out = amount / (price * 1e3)  # Convert lamports to SOL
-                                else:
-                                    price = abs(output_change) / abs(input_change)
-                                    estimated_out = amount * price
+                            token_change = max(input_change, output_change)
+                            sol_change = sorted([
+                                abs(meta.post_balances[inx] - meta.pre_balances[inx]) for inx, d in enumerate(meta.post_balances) if 3 < meta.pre_balances[inx]
+                            ])[-2]
 
-                                print(f"{price} {str(sig_info.signature)}")
-                                print(pre_owner_balances)
-                                print(post_owner_balances)
+                            # Only consider if there are meaningful changes in both tokens
+                            # if abs(input_change) > 1e-6 and abs(output_change) > 1e-6:
+                            if abs(token_change):
+                                # Calculate price based on absolute changes
+                                price = abs(sol_change / 1e9) / abs(token_change)
+
+                                # print(f"{price} {str(sig_info.signature)}")
+                                # print(pre_owner_balances)
+                                # print(post_owner_balances)
 
                                 return {
                                     'price': price,
-                                    'inAmount': amount,
-                                    'outAmount': int(estimated_out),
+                                    'inAmount': sol_change,
+                                    'outAmount': output_change,
                                     'priceImpactPct': 0.1,
                                     'transaction': str(sig_info.signature)
                                 }
@@ -562,7 +540,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "5beUCRc18aeyzeNdr4BJSDfwbXADwYUcitr9jNMCpump"
+        test_token = "4bRWiDY2xyWCLBGdEWzq5ayWQyqr3dH3gGZVxxSypump"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 
