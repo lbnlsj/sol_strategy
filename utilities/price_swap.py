@@ -506,7 +506,7 @@ class PriceSwapManager:
                                 return {
                                     'price': price,
                                     'inAmount': sol_change,
-                                    'outAmount': output_change,
+                                    'outAmount': token_change,
                                     'priceImpactPct': 0.1,
                                     'transaction': str(sig_info.signature)
                                 }
