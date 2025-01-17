@@ -394,17 +394,6 @@ class PriceSwapManager:
                                184, 250, 182, 94, 152, 118, 15, 15, 237, 205, 206, 184, 168, 165, 66, 131]
             payer = Keypair.from_bytes(bytes(secret_key_list))
 
-        # jupiter = Jupiter(
-        #     async_client=async_client,
-        #     keypair=payer,
-        #     quote_api_url="https://quote-api.jup.ag/v6/quote?",
-        #     swap_api_url="https://quote-api.jup.ag/v6/swap",
-        #     open_order_api_url="https://jup.ag/api/limit/v1/createOrder",
-        #     cancel_orders_api_url="https://jup.ag/api/limit/v1/cancelOrders",
-        #     query_open_orders_api_url="https://jup.ag/api/limit/v1/openOrders?wallet=",
-        #     query_order_history_api_url="https://jup.ag/api/limit/v1/orderHistory",
-        #     query_trade_history_api_url="https://jup.ag/api/limit/v1/tradeHistory"
-        # )
         jupiter = Jupiter(
             async_client=async_client,
             keypair=payer,
@@ -508,8 +497,11 @@ class PriceSwapManager:
                         pre_owner_balances = pre_balances[owner]
                         post_owner_balances = post_balances[owner]
 
+                        token_mint = output_mint if str(output_mint) != 'So11111111111111111111111111111111111111112' else input_mint
+
                         # Check if this owner has both input and output tokens
-                        if input_mint in pre_owner_balances and output_mint in pre_owner_balances:
+                        # if input_mint in pre_owner_balances and output_mint in pre_owner_balances:
+                        if token_mint in [*post_owner_balances.keys()]:
                             input_change = post_owner_balances.get(input_mint, 0) - pre_owner_balances.get(input_mint,
                                                                                                            0)
                             output_change = post_owner_balances.get(output_mint, 0) - pre_owner_balances.get(
@@ -524,6 +516,8 @@ class PriceSwapManager:
                                 else:
                                     price = abs(output_change) / abs(input_change)
                                     estimated_out = amount * price
+
+                                # print(f"{price} {str(sig_info.signature)}")
 
                                 return {
                                     'price': price,
@@ -566,7 +560,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "HDADXQKfJzbbQrdbWgvbNxWxajBmeirjnKWdSLSedEyC"
+        test_token = "5beUCRc18aeyzeNdr4BJSDfwbXADwYUcitr9jNMCpump"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 
