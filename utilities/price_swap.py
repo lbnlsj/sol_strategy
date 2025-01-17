@@ -535,7 +535,7 @@ class PriceSwapManager:
 
             # Fallback to Jupiter quote if no valid swap transactions found
             await asyncio.sleep(2)
-            return await self.get_current_price1(input_mint, output_mint, amount, slippage_bps)
+            return await self.get_current_price(input_mint, output_mint, amount, slippage_bps)
 
         except Exception as e:
             traceback.print_stack()
