@@ -517,7 +517,7 @@ class PriceSwapManager:
                                     price = abs(output_change) / abs(input_change)
                                     estimated_out = amount * price
 
-                                # print(f"{price} {str(sig_info.signature)}")
+                                print(f"{price} {str(sig_info.signature)}")
 
                                 return {
                                     'price': price,
