@@ -343,11 +343,9 @@ class TaskExecutor:
                    any(len(state['triggered_levels']) != len(state['levels']) for state in wallet_states.values())):
 
                 current_price, quote_data = await self._get_current_price_real(task['contractAddress'], amount)
-                # self.log('INFO', f'{task["contractAddress"]} price: {current_price}')
+                self.log('INFO', f'{task["contractAddress"]} price: {current_price}')
 
                 if current_price is None:
-                    # self.log("ERROR", f"查询 价格失败 task: {task} ")
-                    # await asyncio.sleep(1)
                     print(f'查询 价格失败 task: {task} ')
                     continue
 

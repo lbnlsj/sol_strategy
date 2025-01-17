@@ -439,7 +439,7 @@ class PriceSwapManager:
     ) -> Optional[Dict]:
         """Gets current price by fetching the latest transaction for the token"""
         try:
-            # jupiter, async_client, _ = await self.create_jupiter_client()
+            print(f'input_mint {input_mint}\t {output_mint}')
             rpc_url = self.settings_manager.settings.get(
                 "rpcUrl",
                 "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
