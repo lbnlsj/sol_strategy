@@ -34,6 +34,7 @@ import os
 # 改为绝对导入
 import sys
 from pathlib import Path
+
 current_dir = Path(__file__).parent
 project_root = current_dir.parent
 sys.path.append(str(project_root))
@@ -172,7 +173,13 @@ class PriceSwapManager:
                 tip_amount = random.uniform(0.0001, 0.02) if not tip_amount else tip_amount
                 tip_lamports = int(tip_amount * 1_000_000_000)  # Convert to lamports
                 # tip_accounts = self.jito_client.get_tip_accounts()
-                tip_accounts = ['DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL', 'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt', 'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY', 'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh', 'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe', 'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49', '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT']
+                tip_accounts = ['DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
+                                'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
+                                'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
+                                'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
+                                'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
+                                'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
+                                '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT']
                 tip_account = random.choice(tip_accounts)
                 # tip_account = '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5'
                 tip_pubkey = Pubkey.from_string(tip_account)
@@ -437,7 +444,7 @@ class PriceSwapManager:
                 try:
                     tx_response = await async_client.get_transaction(
                         Signature.from_string(str(sig_info.signature)),
-                        # Signature.from_string('44JqiuiJ8gkcoUYni7MS5eHi68JdXRjoNqAsVvU98qiHQh3xydyhTBEghYw1hm3dsy2s4Wk4h2Xfx9nF7gVzecVd'),
+                        # Signature.from_string('K5WT8p9iLNwhf6RgRmqUwsaK8MTkqr6nBX55gwWV2sxTi5qxUxD8Zv1hXCJUWANToZ7W9Gfatx1vCEyirALEtnJ'),
                         max_supported_transaction_version=0
                     )
 
@@ -448,71 +455,81 @@ class PriceSwapManager:
                     if meta.pre_token_balances is None or meta.post_token_balances is None:
                         continue
 
-                    # Create lookup dictionaries for pre and post balances
-                    pre_balances = {}
-                    post_balances = {}
+                    token_mint = output_mint if str(
+                        output_mint) != 'So11111111111111111111111111111111111111112' else input_mint
 
-                    # Group balances by owner
-                    for balance in meta.pre_token_balances:
-                        if balance.owner is None or balance.ui_token_amount.ui_amount is None:
-                            continue
-                        if balance.owner not in pre_balances:
-                            pre_balances[balance.owner] = {}
-                        pre_balances[balance.owner][str(balance.mint)] = balance.ui_token_amount.ui_amount
+                    longest_log = sorted(meta.log_messages, key=lambda x: len(x))[-1]
 
-                    for balance in meta.post_token_balances:
-                        if balance.owner is None or balance.ui_token_amount.ui_amount is None:
-                            continue
-                        if balance.owner not in post_balances:
-                            post_balances[balance.owner] = {}
-                        post_balances[balance.owner][str(balance.mint)] = balance.ui_token_amount.ui_amount
+                    # OKX DEX
+                    # if 'after_destination_balance: ' in ''.join(meta.log_messages):
+                    #     target_log = [d for d in meta.log_messages if 'after_destination_balance: ' in d][0]
+                    #     token_change = int(target_log.split('after_destination_balance: ')[-1].split(',')[0])
+                    #     sol_change = int(target_log.split('source_token_change: ')[-1].split(',')[0])
+                    #     price = abs(sol_change / 1e3) / abs(token_change)
+                    #     continue
+                    if 'SwapEvent' in ''.join(meta.log_messages):
+                        target_log = [d for d in meta.log_messages if 'SwapEvent' in d][0]
+                        token_change = int(target_log.split('amount_in: ')[-1].split(',')[0])
+                        sol_change = int(target_log.split('amount_out: ')[-1].split(' }')[0])
+                        if sol_change > token_change:
+                            price = abs(token_change / 1e3) / abs(sol_change)
+                        else:
+                            price = abs(sol_change / 1e3) / abs(token_change)
+                        # continue
+                    else:
 
-                    # Find accounts that have both tokens
-                    for owner in pre_balances:
-                        if owner not in post_balances:
-                            continue
+                        b64_log = base64.b64decode(longest_log.replace(' ', '').split(':')[-1])
+                        # pump
+                        if len(longest_log) > 150:
+                            if 'Program data:' not in longest_log or (
+                                    'Sell' not in ''.join(meta.log_messages) and 'Buy' not in ''.join(
+                                meta.log_messages)): continue
 
-                        pre_owner_balances = pre_balances[owner]
-                        post_owner_balances = post_balances[owner]
+                            sol_change = struct.unpack('<Q', b64_log[40:48])[0]
+                            token_change = struct.unpack('<Q', b64_log[48:56])[0]
+                            if sol_change < token_change:
+                                price = abs(sol_change / 1e3) / abs(token_change)
+                            else:
+                                price = abs(token_change / 1e3) / abs(sol_change)
+                        # ray
+                        else:
+                            # continue
+                            if '{' in longest_log:
+                                longest_log = sorted(meta.log_messages, key=lambda x: len(x))[-2]
+                                b64_log = base64.b64decode(longest_log.replace(' ', '').split(':')[-1])
+                            if 'ray_log' not in longest_log:
+                                continue
+                            sol_change = struct.unpack('<Q', b64_log[49:57])[0]
+                            token_change = struct.unpack('<Q', b64_log[1:9])[0]
 
-                        token_mint = output_mint if str(output_mint) != 'So11111111111111111111111111111111111111112' else input_mint
+                            # if str(sol_change) in ''.join(meta.log_messages):
+                            if sol_change * 0.9 < token_change < sol_change * 1.1:
+                                token_change = struct.unpack('<Q', b64_log[9:17])[0]
 
-                        # Check if this owner has both input and output tokens
-                        # if input_mint in pre_owner_balances and output_mint in pre_owner_balances:
-                        if token_mint in [*post_owner_balances.keys()]:
-                            # input_change = post_owner_balances.get(input_mint, 0) - pre_owner_balances.get(input_mint,
-                            #                                                                                0)
-                            # output_change = post_owner_balances.get(output_mint, 0) - pre_owner_balances.get(
-                            #     output_mint, 0)
-                            #
-                            # token_change = max(input_change, output_change)
-                            token_change = max([
-                                abs(meta.post_token_balances[inx].ui_token_amount.ui_amount - meta.pre_token_balances[inx].ui_token_amount.ui_amount) for inx, d in enumerate(meta.pre_token_balances) if meta.pre_token_balances[inx].ui_token_amount.ui_amount
-                            ])
-                            sol_change = sorted([
-                                abs(meta.post_balances[inx] - meta.pre_balances[inx]) for inx, d in enumerate(meta.post_balances) if 3 < meta.pre_balances[inx]
-                            ])[-2]
+                            if sol_change > token_change:
+                                price = abs(token_change / 1e3) / abs(sol_change)
+                            else:
+                                price = abs(sol_change / 1e3) / abs(token_change)
 
-                            # Only consider if there are meaningful changes in both tokens
-                            # if abs(input_change) > 1e-6 and abs(output_change) > 1e-6:
-                            if abs(token_change):
-                                # Calculate price based on absolute changes
-                                price = abs(sol_change / 1e9) / abs(token_change)
+                    if price == 0: continue
+                    print(f"{price} {str(sig_info.signature)} {sol_change} {token_change}")
+                    if price > 0.1:
+                        print()
 
-                                print(f"{price} {str(sig_info.signature)}")
-                                # print(pre_owner_balances)
-                                # print(post_owner_balances)
+                    if price == 0:
+                        continue
 
-                                return {
-                                    'price': price,
-                                    'inAmount': sol_change,
-                                    'outAmount': token_change,
-                                    'priceImpactPct': 0.1,
-                                    'transaction': str(sig_info.signature)
-                                }
+                    return {
+                        'price': price,
+                        'inAmount': sol_change,
+                        'outAmount': token_change,
+                        'priceImpactPct': 0.1,
+                        'transaction': str(sig_info.signature)
+                    }
 
                 except Exception as e:
-                    print(f"Error processing transaction {sig_info.signature}: {str(e)}")
+                    # traceback.print_stack()
+                    print(f"Error processing transaction {sig_info.signature}: {str(e)}\n{longest_log}")
                     continue
 
             # Fallback to Jupiter quote if no valid swap transactions found
@@ -544,7 +561,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "4UEz9SwRgTz3Hb7EE7afPqMHeSPQfftVSXL1tV946Ci5"
+        test_token = "EMtWBVRmYnHTkitU4PnpfamD7yfPkUxHvi23aZyZpump"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 
@@ -557,7 +574,7 @@ if __name__ == "__main__":
                     slippage_bps=1
                 )
 
-                print(f'{result["price"]}\t{result["transaction"]}')
+                # print(f'{result["price"]}\t{result["transaction"]}')
 
 
             except Exception as e:
