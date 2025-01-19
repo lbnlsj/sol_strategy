@@ -434,7 +434,7 @@ class PriceSwapManager:
             # Get recent transactions for the token account
             signature_response = await async_client.get_signatures_for_address(
                 Pubkey.from_string(output_mint),
-                limit=5
+                limit=200
             )
 
             if not signature_response.value:
@@ -444,7 +444,7 @@ class PriceSwapManager:
                 try:
                     tx_response = await async_client.get_transaction(
                         Signature.from_string(str(sig_info.signature)),
-                        # Signature.from_string('K5WT8p9iLNwhf6RgRmqUwsaK8MTkqr6nBX55gwWV2sxTi5qxUxD8Zv1hXCJUWANToZ7W9Gfatx1vCEyirALEtnJ'),
+                        # Signature.from_string('4D2tg1BRWmZ9o8MqGpXrXQuCZYAmcTeebaTifVHuFSEPDeqWf9L9uH74VJX9ASqRrDHXw77c9tB4tfhhwtwSwDfx'),
                         max_supported_transaction_version=0
                     )
 
@@ -458,67 +458,80 @@ class PriceSwapManager:
                     token_mint = output_mint if str(
                         output_mint) != 'So11111111111111111111111111111111111111112' else input_mint
 
-                    longest_log = sorted(meta.log_messages, key=lambda x: len(x))[-1]
+                    target_log = ''
+                    valid_inx = 0
 
-                    # OKX DEX
-                    # if 'after_destination_balance: ' in ''.join(meta.log_messages):
-                    #     target_log = [d for d in meta.log_messages if 'after_destination_balance: ' in d][0]
-                    #     token_change = int(target_log.split('after_destination_balance: ')[-1].split(',')[0])
-                    #     sol_change = int(target_log.split('source_token_change: ')[-1].split(',')[0])
-                    #     price = abs(sol_change / 1e3) / abs(token_change)
-                    #     continue
-                    if 'SwapEvent' in ''.join(meta.log_messages):
-                        target_log = [d for d in meta.log_messages if 'SwapEvent' in d][0]
-                        token_change = int(target_log.split('amount_in: ')[-1].split(',')[0])
-                        sol_change = int(target_log.split('amount_out: ')[-1].split(' }')[0])
-                        if sol_change > token_change:
-                            price = abs(token_change / 1e3) / abs(sol_change)
-                        else:
-                            price = abs(sol_change / 1e3) / abs(token_change)
-                        # continue
-                    else:
+                    token_real_change = 0
 
-                        b64_log = base64.b64decode(longest_log.replace(' ', '').split(':')[-1])
+                    for pre_token_balance in meta.pre_token_balances:
+
+                        for post_token_balance in meta.post_token_balances:
+                            if pre_token_balance.account_index == post_token_balance.account_index and \
+                                str(pre_token_balance.mint) == token_mint and \
+                                    str(post_token_balance.mint) == token_mint:
+                                token_pre_amount = int(pre_token_balance.ui_token_amount.amount)
+                                token_post_amount = int(post_token_balance.ui_token_amount.amount)
+                                token_real_change = abs(token_post_amount - token_pre_amount)
+                                break
+                        if token_real_change != 0: break
+
+                    for log in meta.log_messages:
+                        valid_log = log.replace(' ', '').split(':')[-1]
+                        if len(valid_log) <= 32: continue
+                        try:
+                            b64_log = base64.b64decode(valid_log)
+                        except Exception as e:
+                            continue
+
                         # pump
-                        if len(longest_log) > 150:
-                            if 'Program data:' not in longest_log or (
-                                    'Sell' not in ''.join(meta.log_messages) and 'Buy' not in ''.join(
-                                meta.log_messages)): continue
+                        for inx in range(len(b64_log) - 31):
+                            token_bytes = struct.unpack('32s', b64_log[inx: inx+32])[0]
+                            if str(Pubkey.from_bytes(token_bytes)) == token_mint:
+                                target_log = valid_log
+                                valid_inx = inx
+                                break
 
-                            sol_change = struct.unpack('<Q', b64_log[40:48])[0]
-                            token_change = struct.unpack('<Q', b64_log[48:56])[0]
-                            if sol_change < token_change:
-                                price = abs(sol_change / 1e3) / abs(token_change)
-                            else:
-                                price = abs(token_change / 1e3) / abs(sol_change)
-                        # ray
+                        if valid_inx != 0:
+                            break
+
+                        # ray v4
+                        for inx in range(len(b64_log) - 7):
+                            amount = struct.unpack('<Q', b64_log[inx: inx + 8])[0]
+
+                            if abs(amount) == token_real_change:
+                                target_log = valid_log
+                                valid_inx = inx
+                                break
+
+                        if valid_inx != 0:
+                            break
+
+                    dex = ''
+                    b64_log = base64.b64decode(target_log)
+                    if valid_inx == 8:
+                        dex = 'pump'
+                        sol_change = struct.unpack('<Q', b64_log[40:48])[0]
+                        token_change = struct.unpack('<Q', b64_log[48:56])[0]
+                        price = abs(sol_change / 1e3) / abs(token_change)
+                    else:
+                        if valid_inx == 0:
+                            price = 0
                         else:
-                            # continue
-                            if '{' in longest_log:
-                                longest_log = sorted(meta.log_messages, key=lambda x: len(x))[-2]
-                                b64_log = base64.b64decode(longest_log.replace(' ', '').split(':')[-1])
-                            if 'ray_log' not in longest_log:
-                                continue
-                            sol_change = struct.unpack('<Q', b64_log[49:57])[0]
-                            token_change = struct.unpack('<Q', b64_log[1:9])[0]
-
-                            # if str(sol_change) in ''.join(meta.log_messages):
-                            if sol_change * 0.9 < token_change < sol_change * 1.1:
-                                token_change = struct.unpack('<Q', b64_log[9:17])[0]
-
-                            if sol_change > token_change:
-                                price = abs(token_change / 1e3) / abs(sol_change)
+                            dex = 'ray v4'
+                            if valid_inx < 20:
+                                sol_change = struct.unpack('<Q', b64_log[49:57])[0]
                             else:
-                                price = abs(sol_change / 1e3) / abs(token_change)
+                                sol_change = struct.unpack('<Q', b64_log[25:33])[0]
+                                continue
+                            token_change = token_real_change
+                            price = abs(sol_change / 1e3) / abs(token_change)
 
                     if price == 0: continue
-                    print(f"{price} {str(sig_info.signature)} {sol_change} {token_change}")
+                    print(f"{price} {str(sig_info.signature)} sol:change{sol_change / 10e9} {token_change / 10e5} {dex}")
                     if price > 0.1:
                         print()
 
-                    if price == 0:
-                        continue
-
+                    # await asyncio.sleep(0.5)
                     return {
                         'price': price,
                         'inAmount': sol_change,
@@ -529,7 +542,7 @@ class PriceSwapManager:
 
                 except Exception as e:
                     # traceback.print_stack()
-                    print(f"Error processing transaction {sig_info.signature}: {str(e)}\n{longest_log}")
+                    print(f"Error processing transaction {sig_info.signature}: {str(e)}")
                     continue
 
             # Fallback to Jupiter quote if no valid swap transactions found
@@ -561,7 +574,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "EMtWBVRmYnHTkitU4PnpfamD7yfPkUxHvi23aZyZpump"
+        test_token = "C65GE6jm7SMXVsxVPdH36CHSWoy37iCDnHYpwA8apump"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 
