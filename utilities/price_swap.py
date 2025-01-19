@@ -574,7 +574,7 @@ if __name__ == "__main__":
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
 
-        test_token = "C65GE6jm7SMXVsxVPdH36CHSWoy37iCDnHYpwA8apump"
+        test_token = "EUqFjf1TySMNd95d57zTFAPijGgKz34Rm35rUg2jpump"
         sol_mint = "So11111111111111111111111111111111111111112"
         amount = 100_000_000  # 0.1 SOL
 

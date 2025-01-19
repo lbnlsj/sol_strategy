@@ -181,7 +181,7 @@ class TaskExecutor:
                 trailing_stop_pct = float(strategy['trailingStop'])
                 wallet_state['trailing_stop_price'] = current_price * (1 - trailing_stop_pct / 100)
                 self.log("INFO",
-                         f"钱包 {wallet_pubkey} 更新移动止损价格（原始价格{wallet_state['entry_price']}，当前价格{current_price}）: {wallet_state['trailing_stop_price']}")
+                         f"钱包 {wallet_pubkey} ca：{task['contractAddress']} 更新移动止损价格（原始价格{wallet_state['entry_price']}，当前价格{current_price}）: {wallet_state['trailing_stop_price']}")
 
         except Exception as e:
             self.log("ERROR", f"钱包 {wallet_pubkey} 交易操作失败: {str(e)}")
@@ -342,7 +342,12 @@ class TaskExecutor:
             while (not stop_event.is_set() and any(state['token_balance'] > 1 for state in wallet_states.values()) and
                    any(len(state['triggered_levels']) != len(state['levels']) for state in wallet_states.values())):
 
-                current_price, quote_data = await self._get_current_price_real(task['contractAddress'], amount)
+                try:
+                    current_price, quote_data = await self._get_current_price_real(task['contractAddress'], amount)
+                except Exception as e:
+                    print(e)
+                    await asyncio.sleep(0.5)
+                    continue
                 # self.log('INFO', f'{task["contractAddress"]} price: {current_price}')
 
                 if current_price is None:
