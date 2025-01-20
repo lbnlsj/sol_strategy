@@ -20,10 +20,10 @@ def initialize_task_executor(app, storage_manager, task_manager, strategy_manage
             contract_address = data.get("ca")
             type_id = int(data.get("type_id"))
 
-            # tasks = json.loads(open('data/tasks.json', 'r', encoding='utf-8').read())
-            # running_tasks = [tasks[k] for k in tasks.keys() if tasks[k]['status'] != 'stopped']
-            # if len(running_tasks) > 0:
-            #     return jsonify({"error": "Not support multiple tasks, please wait."}), 404
+            tasks = json.loads(open('data/tasks.json', 'r', encoding='utf-8').read())
+            running_tasks = [tasks[k] for k in tasks.keys() if tasks[k]['status'] != 'stopped']
+            if len(running_tasks) > 0:
+                return jsonify({"error": "Not support multiple tasks, please wait."}), 404
 
             # 查找策略
             strategy = next((s for s in strategy_manager.strategies if type_id in s["selectedTypes"] and s["isActive"]), None)
