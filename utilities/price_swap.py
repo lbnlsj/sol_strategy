@@ -126,17 +126,24 @@ class PriceSwapManager:
             if is_buy:
                 amount_lamports = int(amount_lamports * 1_000)
 
-            # Get Jupiter quote
-            quote_response = await jupiter.quote(
-                input_mint=input_mint,
-                output_mint=output_mint,
-                amount=amount_lamports,
-                # slippage_bps=slippage_bps
-                slippage_bps=10000
-            )
+            while 1:
+                # Get Jupiter quote
+                quote_response = await jupiter.quote(
+                    input_mint=input_mint,
+                    output_mint=output_mint,
+                    amount=amount_lamports,
+                    # slippage_bps=slippage_bps
+                    slippage_bps=10000
+                )
 
-            if 'error' in quote_response:
-                raise Exception(f'jupiter quote error:' + str(quote_response['error']))
+                if 'error' in quote_response:
+                    self.logger.error(f"swap error {token_address} {direction} {amount} :{quote_response}")
+                    await asyncio.sleep(1)
+                else:
+                    break
+
+            # if 'error' in quote_response:
+            #     raise Exception(f'jupiter quote error:' + str(quote_response['error']))
 
             entry_price = (int(quote_response['inAmount']) / 10e9) / (int(quote_response['outAmount']) / 10e6)
             # Calculate compute unit price in micro-lamports
@@ -467,7 +474,7 @@ class PriceSwapManager:
 
                         for post_token_balance in meta.post_token_balances:
                             if pre_token_balance.account_index == post_token_balance.account_index and \
-                                str(pre_token_balance.mint) == token_mint and \
+                                    str(pre_token_balance.mint) == token_mint and \
                                     str(post_token_balance.mint) == token_mint:
                                 token_pre_amount = int(pre_token_balance.ui_token_amount.amount)
                                 token_post_amount = int(post_token_balance.ui_token_amount.amount)
@@ -485,7 +492,7 @@ class PriceSwapManager:
 
                         # pump
                         for inx in range(len(b64_log) - 31):
-                            token_bytes = struct.unpack('32s', b64_log[inx: inx+32])[0]
+                            token_bytes = struct.unpack('32s', b64_log[inx: inx + 32])[0]
                             if str(Pubkey.from_bytes(token_bytes)) == token_mint:
                                 target_log = valid_log
                                 valid_inx = inx
@@ -527,7 +534,8 @@ class PriceSwapManager:
                             price = abs(sol_change / 1e3) / abs(token_change)
 
                     if price == 0: continue
-                    print(f"{price} {str(sig_info.signature)} sol:change{sol_change / 10e9} {token_change / 10e5} {dex}")
+                    print(
+                        f"{price} {str(sig_info.signature)} sol:change{sol_change / 10e9} {token_change / 10e5} {dex}")
                     if price > 0.1:
                         print()
 
