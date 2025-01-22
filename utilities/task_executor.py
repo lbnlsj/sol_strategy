@@ -588,7 +588,7 @@ class TaskExecutor:
                             break
                         except Exception as e:
                             traceback.print_stack()
-                            self.log('ERROR', '执行交易失败：' + str(e))
+                            self.log('ERROR', '执行交易失败1：' + str(e))
 
                     if 'success' in result and not result['success']:
                         self.log('ERROR', str(result))

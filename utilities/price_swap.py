@@ -136,7 +136,7 @@ class PriceSwapManager:
                     slippage_bps=10000
                 )
 
-                if 'error' in quote_response:
+                if 'error' in str(quote_response) or 'not tradable' in str(quote_response):
                     self.logger.error(f"swap error {token_address} {direction} {amount} :{quote_response}")
                     await asyncio.sleep(1)
                 else:
