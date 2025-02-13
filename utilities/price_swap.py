@@ -1,3 +1,4 @@
+import re
 import struct
 import base64
 import httpx
@@ -25,6 +26,7 @@ from pathlib import Path
 from solana.rpc.commitment import Processed
 from jupiter_python_sdk.jupiter import Jupiter
 from solana.rpc.async_api import AsyncClient
+from solana.rpc.api import Client
 from solders.message import Message, MessageV0
 # from .jito_jsonrpc_sdk import JitoJsonRpcSDK
 # from .storage import StorageManager
@@ -39,9 +41,16 @@ current_dir = Path(__file__).parent
 project_root = current_dir.parent
 sys.path.append(str(project_root))
 
+import utilities.pump as pump
+import utilities.raydium as raydium
 from utilities.jito_jsonrpc_sdk import JitoJsonRpcSDK
 from utilities.storage import StorageManager
 from utilities.settings import SettingsManager
+
+RAYDIUM_AUTHORITY = '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1'
+RAYDIUM_LIQUIDITY_V4 = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'
+OKX_DEX_ROUTER = '6m2CDdhRgxpH4WjvdzxAYbGxwdGUz5MziiL5jek2kBma'
+TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 
 
 class PriceSwapManager:
@@ -114,149 +123,98 @@ class PriceSwapManager:
     ) -> Dict:
         entry_price = 0
         try:
-            print(f'tip_amount: {tip_amount}')
             jupiter, async_client, payer = await self.create_jupiter_client(wallet_key, use_jito)
+            client = self.get_client()
 
             is_buy = direction.lower() == 'buy'
-            input_mint = "So11111111111111111111111111111111111111112" if is_buy else token_address
-            output_mint = token_address if is_buy else "So11111111111111111111111111111111111111112"
 
-            # Convert amount if necessary
-            amount_lamports = int(amount * 1_000_000)
-            if is_buy:
-                amount_lamports = int(amount_lamports * 1_000)
+            amount = float(amount)
 
-            while 1:
-                # Get Jupiter quote
-                quote_response = await jupiter.quote(
-                    input_mint=input_mint,
-                    output_mint=output_mint,
-                    amount=amount_lamports,
-                    # slippage_bps=slippage_bps
-                    slippage_bps=10000
-                )
-
-                if 'error' in str(quote_response) or 'not tradable' in str(quote_response):
-                    self.logger.error(f"swap error {token_address} {direction} {amount} :{quote_response}")
-                    await asyncio.sleep(1)
+            is_pump = True if not pump.get_complete(str(token_address)) else False
+            if is_pump:
+                if is_buy:
+                    instructions = pump.buy_instruction(str(token_address), amount, 100)
                 else:
-                    break
+                    instructions = pump.sell_instruction(str(token_address), amount / 100, 100)
+            else:
+                if is_buy:
+                    instructions = raydium.buy_instructions(client, str(token_address), amount, 100)
+                else:
+                    instructions = raydium.sell_instructions(client, str(token_address), amount / 100, 100)
 
-            # if 'error' in quote_response:
-            #     raise Exception(f'jupiter quote error:' + str(quote_response['error']))
+            latest_blockhash = client.get_latest_blockhash()
 
-            entry_price = (int(quote_response['inAmount']) / 10e9) / (int(quote_response['outAmount']) / 10e6)
-            # Calculate compute unit price in micro-lamports
-            compute_unit_price_micro_lamports = int(priority_fee / 14e-5) * 10_000
+            jito_client = await self._init_jito_client()
 
-            # Get swap transaction
-            transaction_parameters = {
-                "quoteResponse": quote_response,
-                "userPublicKey": str(jupiter.keypair.pubkey()),
-                "computeUnitPriceMicroLamports": compute_unit_price_micro_lamports
-            }
+            # Add Jito tip transaction if specified
+            tip_amount = random.uniform(0.0001, 0.05) if not tip_amount else tip_amount
+            tip_lamports = int(tip_amount * 1_000_000_000)  # Convert to lamports
+            # tip_accounts = self.jito_client.get_tip_accounts()
+            tip_accounts = ['DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
+                            'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
+                            'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
+                            'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
+                            'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
+                            'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
+                            '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT']
+            tip_account = random.choice(tip_accounts)
+            # tip_account = '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5'
+            tip_pubkey = Pubkey.from_string(tip_account)
 
-            swap_response = {'error': 'init'}
-            while 'error' in swap_response:
-                if swap_response['error'] != 'init':
-                    print(f'error jupiter quote: {swap_response["error"]}')
-                try:
-                    swap_response = httpx.post(
-                        url=jupiter.ENDPOINT_APIS_URL['SWAP'],
-                        json=transaction_parameters
-                    ).json()
-                except Exception as e:
-                    pass
-                await asyncio.sleep(0.1)
+            # Create tip instruction
+            tip_ix = transfer(TransferParams(
+                from_pubkey=payer.pubkey(),
+                to_pubkey=tip_pubkey,
+                lamports=tip_lamports
+            ))
+            tip_tx = Transaction.new_with_payer([tip_ix], payer.pubkey())
+            tip_tx.sign([payer], latest_blockhash.value.blockhash)
 
-            # Decode the transaction
-            raw_tx = VersionedTransaction.from_bytes(base64.b64decode(swap_response['swapTransaction']))
+            tx = Transaction
+
+            main_tx = Transaction.new_signed_with_payer(
+                instructions=instructions,  # swap 指令
+                payer=payer.pubkey(),  # 支付者的公钥
+                signing_keypairs=[payer],  # 签名密钥对列表
+                recent_blockhash=latest_blockhash.value.blockhash  # 最新的区块哈希
+            )
 
             if use_jito:
-                # Initialize Jito client
-                jito_client = await self._init_jito_client()
 
-                # Add Jito tip transaction if specified
-                tip_amount = random.uniform(0.0001, 0.02) if not tip_amount else tip_amount
-                tip_lamports = int(tip_amount * 1_000_000_000)  # Convert to lamports
-                # tip_accounts = self.jito_client.get_tip_accounts()
-                tip_accounts = ['DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
-                                'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
-                                'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
-                                'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
-                                'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
-                                'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
-                                '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT']
-                tip_account = random.choice(tip_accounts)
-                # tip_account = '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5'
-                tip_pubkey = Pubkey.from_string(tip_account)
-
-                # Create tip instruction
-                tip_ix = transfer(TransferParams(
-                    from_pubkey=payer.pubkey(),
-                    to_pubkey=tip_pubkey,
-                    lamports=tip_lamports
-                ))
-                tip_tx = Transaction.new_with_payer([tip_ix], payer.pubkey())
-                tip_tx.sign([payer], raw_tx.message.recent_blockhash)
-                # Get the compiled instruction from the tip transaction
-
-                # Create a new transaction that combines Jupiter swap with tip
-                if isinstance(raw_tx.message, MessageV0):
-
-                    account_keys = list(raw_tx.message.account_keys)
-                    instructions = list(raw_tx.message.instructions)
-                    # swap_instructions.append(tip_compiled)
-
-                    combined_message = MessageV0(
-                        raw_tx.message.header,
-                        account_keys,
-                        raw_tx.message.recent_blockhash,
-                        instructions,
-                        raw_tx.message.address_table_lookups
-                    )
-
-                else:
-                    print('警告： 过时的 legacy 发现')
-                    # For legacy transactions
-                    swap_instructions = list(raw_tx.message.instructions)
-                    swap_instructions.append(tip_ix)
-
-                    # Create new Message with combined instructions
-                    combined_message = Message(
-                        raw_tx.message.header,
-                        raw_tx.message.account_keys,
-                        raw_tx.message.recent_blockhash,
-                        swap_instructions
-                    )
-
-                # Sign the combined message
-                signature = payer.sign_message(message.to_bytes_versioned(combined_message))
-                signed_tx = VersionedTransaction.populate(combined_message, [signature])
-
-                # Send transaction through Jito
-                serialized_tx = base58.b58encode(bytes(signed_tx)).decode('ascii')
-                serialized_tx_fee = base58.b58encode(bytes(tip_tx)).decode('ascii')
+                # Serialize both transactions for the bundle
+                serialized_main_tx = base58.b58encode(bytes(main_tx)).decode('ascii')
+                serialized_tip_tx = base58.b58encode(bytes(tip_tx)).decode('ascii')
 
                 if self.trade:
-                    jito_response = jito_client.send_bundle([serialized_tx, serialized_tx_fee])
+                    # Send the bundle with both transactions using base64 encoding
+                    jito_response = jito_client.send_bundle(
+                        [
+                            serialized_main_tx,
+                            serialized_tip_tx]
+                    )
                 else:
                     jito_response = {'success': True, 'data': {'result': {'value': []}}}
                 print(jito_response)
                 if jito_response.get('success'):
-                    # result = []
-                    # while result == []:
-                    #     await asyncio.sleep(5)
-                    #     result = jito_client.get_bundle_statuses(jito_response['data']['result'])
-                    #     print(result)
-                    #     value = result['data']['result']['value']
-                    # if len(value) == 0:
-                    #     transactions = [str(signature)]
-                    # else:
-                    #     transactions = value[0]['transactions']
-                    transactions = [str(signature)]
+
+                    transactions = [str(main_tx.signatures[0])]
                     for signature_str in transactions:
                         print('https://solscan.io/tx/' + signature_str)
+
+                    if direction == 'buy':
+
+                        while 1:
+                            try:
+                                await asyncio.sleep(1)
+                                entry_price = self.query_signature_price(
+                                                str(main_tx.signatures[0]),
+                                                token_address)
+                                break
+                            except Exception as e:
+                                # print(e)
+                                pass
+                    else:
+                        entry_price = 1
 
                     return {
                         # "success": 'finalized',
@@ -267,31 +225,41 @@ class PriceSwapManager:
                         "priority_fee": priority_fee,
                         "tip_amount": tip_amount,
                         "entry_price": entry_price,
-                        "out_amount": int(quote_response['outAmount']) / 10e6 if direction == 'buy' else int(
-                            quote_response['inAmount']) / 10e6
+                        "out_amount": amount / entry_price if direction == 'buy' else 0
                     }
                 else:
                     raise Exception(f"Jito transaction failed: {jito_response.get('error')}")
 
             else:
-                # Regular transaction without Jito
-                signature = payer.sign_message(message.to_bytes_versioned(raw_tx.message))
-                signed_tx = VersionedTransaction.populate(raw_tx.message, [signature])
+                txn_sig = client.send_transaction(
+                    txn=main_tx,
+                    opts=TxOpts(skip_preflight=True)
+                ).value
 
-                opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
-                result = await async_client.send_raw_transaction(txn=bytes(signed_tx), opts=opts)
+                if direction == 'buy':
+
+                    while 1:
+                        try:
+                            await asyncio.sleep(1)
+                            entry_price = self.query_signature_price(
+                                str(main_tx.signatures[0]),
+                                token_address)
+                            break
+                        except Exception as e:
+                            print(e)
+                else:
+                    entry_price = 1
 
                 return {
                     "success": True,
-                    "transaction_id": result.value,
-                    "explorer_url": f"https://solscan.io/tx/{result.value}",
+                    "transaction_id": txn_sig,
+                    "explorer_url": f"https://solscan.io/tx/{txn_sig}",
                     "direction": direction,
                     "use_jito": False,
                     "priority_fee": priority_fee,
                     "tip_amount": None,
                     "entry_price": entry_price,
-                    "out_amount": int(quote_response['outAmount']) / 10e6 if direction == 'buy' else int(
-                        quote_response['inAmount']) / 10e6
+                    "out_amount": amount / entry_price if direction == 'buy' else 0
                 }
 
         except Exception as e:
@@ -312,8 +280,6 @@ class PriceSwapManager:
             return await self.execute_swap(direction, token_address, amount, wallet_key, use_jito, priority_fee,
                                            tip_amount,
                                            slippage_bps, quote_response, price_limit, try_time)
-
-    # Rest of the class implementation remains the same...
 
     def get_wallet_from_string(self, wallet_key):
         if len(wallet_key) != 44:
@@ -376,6 +342,14 @@ class PriceSwapManager:
         except Exception as e:
             self.logger.error(f"获取代币余额失败: {str(e)}")
             return None
+
+    def get_client(self):
+        rpc_url = self.settings_manager.settings.get(
+            "rpcUrl",
+            "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
+        )
+        client = Client(rpc_url)
+        return client
 
     async def create_jupiter_client(self, wallet_key=None, use_jito=False) -> Tuple[Jupiter, AsyncClient, Keypair]:
         if use_jito:
@@ -561,11 +535,196 @@ class PriceSwapManager:
             traceback.print_stack()
             return {'error': str(e)}
 
+    async def test_signature_price(self, mint_str: str):
+        rpc_url = self.settings_manager.settings.get(
+            "rpcUrl",
+            "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
+        )
+
+        async_client = AsyncClient(rpc_url)
+
+        signature_response = await async_client.get_signatures_for_address(
+            Pubkey.from_string(mint_str),
+            limit=200
+        )
+        print(f'一共监测到{len(signature_response.value)}条信息')
+        for sig_info in signature_response.value:
+            if sig_info.err is not None: continue
+            try:
+                price = self.query_signature_price(str(sig_info.signature), mint_str)
+                if price is False: continue
+            # except ValueError as e:
+            #     print('1 https://solscan.io/tx/' + str(sig_info.signature))
+            except Exception as e:
+                print(e)
+                print('2 https://solscan.io/tx/' + str(sig_info.signature))
+                continue
+
+    # 这里需要补充 查询dex类型，日志分析
+    def query_signature_price(self, signature: str, mint_str: str) -> float:
+
+        rpc_url = self.settings_manager.settings.get(
+            "rpcUrl",
+            "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
+        )
+
+        sol_mint = 'So11111111111111111111111111111111111111112'
+
+        client = Client(rpc_url)
+        tx_response = client.get_transaction(
+            Signature.from_string(signature),
+            max_supported_transaction_version=0
+        )
+        logs = tx_response.value.transaction.meta.log_messages
+        logs_text = ''.join(logs)
+        pump_logs = re.findall('Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P successProgram data: (.*?)Program',
+                               logs_text)
+        # ray_logs = re.findall('Program log: ray_log: (.*?)Program', logs_text)
+
+        for pump_log in pump_logs:
+            b64_log = base64.b64decode(pump_log)
+            # dex = 'pump'
+            if len(b64_log) < 56: continue
+            token_address = str(Pubkey.from_bytes(struct.unpack('32s', b64_log[8: 8 + 32])[0]))
+            if token_address != mint_str: continue
+            sol_change = struct.unpack('<Q', b64_log[40:48])[0]
+            token_change = struct.unpack('<Q', b64_log[48:56])[0]
+            price = abs(sol_change / 1e3) / abs(token_change)
+            # token_bytes = struct.unpack('32s', b64_log[8: 40])[0]
+            print(f'{price} sol change: {sol_change}, token change: {token_change} {signature}')
+            return price
+
+        accounts = [str(d) for d in tx_response.value.transaction.transaction.message.account_keys]
+        accounts += [str(d) for d in tx_response.value.transaction.meta.loaded_addresses.writable] + [str(d) for d in
+                                                                                                      tx_response.value.transaction.meta.loaded_addresses.readonly]
+        inner_instructions = tx_response.value.transaction.meta.inner_instructions
+        token_program_index = accounts.index(TOKEN_PROGRAM)
+        try:
+            swap_program_index = accounts.index(RAYDIUM_LIQUIDITY_V4)
+        except Exception as e:
+            print('https://solscan.io/tx/' + signature + ' 找不到交易数据')
+            return False
+
+        tmp_amount = [0, 0]
+        instruction_inx = 0
+        instruction_inx -= 1
+        potential_pool_accounts = [(d.account_index, float(d.ui_token_amount.amount)) for d in
+                                   tx_response.value.transaction.meta.pre_token_balances if \
+                                   str(d.mint) == mint_str]
+        if len(potential_pool_accounts) == 0:
+            print('没有找到 pool account ')
+            raise Exception
+        pool_account_index = max(potential_pool_accounts, key=lambda x: x[1])[0]
+
+        accounts_index = []
+        is_swap = False
+        for inner_instruction in inner_instructions:
+            for instruction in inner_instruction.instructions:
+
+                # if not hasattr(instruction, 'program_id_index'):
+                #     print('没有找到program_id_index属性')
+
+                parent_instruction = tx_response.value.transaction.transaction.message.instructions[
+                    inner_instruction.index]
+                if parent_instruction.program_id_index == swap_program_index:
+                    is_swap = True
+                    # continue
+                if is_swap:
+                    if tmp_amount[0] == 0:
+                        accounts_index += instruction.accounts
+                        tmp_amount[0] = struct.unpack('<BQ', base58.b58decode(instruction.data)[0:9])[1]
+                    else:
+                        accounts_index += instruction.accounts
+                        tmp_amount[1] = struct.unpack('<BQ', base58.b58decode(instruction.data)[0:9])[1]
+                        sol_change = min(tmp_amount[:2])
+                        token_change = max(tmp_amount[:2])
+                        price = abs(sol_change / 1e3) / abs(token_change)
+
+                        if pool_account_index in accounts_index:
+                            # if price < 2.002882147323973e-08:
+                            #     print(f'3 https://solscan.io/tx/' + signature)
+                            #     raise Exception
+                            print(f'{price} sol change: {sol_change}, token change: {token_change} {signature}')
+                            return price
+                        accounts_index = []
+                        tmp_amount = [0, 0]
+                        is_swap = False
+
+        accounts_index = []
+        is_swap = False
+        for inner_instruction in inner_instructions:
+            for instruction in inner_instruction.instructions:
+
+                if instruction.program_id_index == swap_program_index:
+                    is_swap = True
+                    continue
+                if is_swap:
+                    if tmp_amount[0] == 0:
+                        accounts_index += instruction.accounts
+                        tmp_amount[0] = struct.unpack('<BQ', base58.b58decode(instruction.data)[0:9])[1]
+                    else:
+                        accounts_index += instruction.accounts
+                        tmp_amount[1] = struct.unpack('<BQ', base58.b58decode(instruction.data)[0:9])[1]
+                        sol_change = min(tmp_amount[:2])
+                        token_change = max(tmp_amount[:2])
+                        price = abs(sol_change / 1e3) / abs(token_change)
+
+                        if pool_account_index in accounts_index:
+                            # if price > 1e-6:
+                            #     print(f'3 https://solscan.io/tx/' + signature)
+                            #     raise Exception
+                            print(f'{price} sol change: {sol_change}, token change: {token_change} {signature}')
+                            return price
+                        accounts_index = []
+                        tmp_amount = [0, 0]
+                        is_swap = False
+
+        raise Exception
+
+    def get_v4_pool(self, mint_str: str) -> dict:
+        client = self.get_client()
+
+        token_mint = Pubkey.from_string(mint_str)
+        sol_mint = Pubkey.from_string("So11111111111111111111111111111111111111112")
+
+        token_mint0 = sol_mint if str(sol_mint) < str(token_mint) else token_mint
+        token_mint1 = token_mint if str(sol_mint) < str(token_mint) else sol_mint
+
+        seeds = [
+            bytes("pool", 'utf-8'),
+            bytes(token_mint0),
+            bytes(token_mint1)
+        ]
+
+        raydium_program_id = Pubkey.from_string(RAYDIUM_LIQUIDITY_V4)
+        pool_address, _ = Pubkey.find_program_address(
+            seeds,
+            raydium_program_id
+        )
+
+        token_account_response = client.get_token_accounts_by_owner(
+            pool_address,
+            types.TokenAccountOpts()
+        )
+
+        pool_accounts = {}
+        for account in token_account_response.value:
+            token_data = client.get_token_account_balance(account.pubkey)
+            mint = account.account.data.parsed['info']['mint']
+            pool_accounts[mint] = str(account.pubkey)
+
+        return {
+            "pool_address": str(pool_address),
+            "pool_token_account0": pool_accounts[str(token_mint0)],
+            "pool_token_account1": pool_accounts[str(token_mint1)]
+        }
+
 
 if __name__ == "__main__":
     import asyncio
     import os
     import sys
+    import re
     from pathlib import Path
     import time
 
@@ -581,28 +740,33 @@ if __name__ == "__main__":
         storage = StorageManager(data_dir=str(project_root / "data"))
         settings = SettingsManager(storage)
         swap_manager = PriceSwapManager()
+        swap_manager.trade = True
 
-        test_token = "BP3DWh5C5wneJinpzYpxNqHNViyvYithDc5qGniHpump"
-        sol_mint = "So11111111111111111111111111111111111111112"
-        amount = 100_000_000  # 0.1 SOL
+        # test_token = "47uDxkwz5EbC8By5aXQqNrDTN5WngU8giKvvf83ppump"
 
-        while True:
-            try:
-                result = await swap_manager.get_current_price(
-                    input_mint=sol_mint,
-                    output_mint=test_token,
-                    amount=amount,
-                    slippage_bps=1
-                )
+        # pool_address = swap_manager.get_v4_pool(mint_str=test_token)
 
-                # print(f'{result["price"]}\t{result["transaction"]}')
+        # sol_mint = "So11111111111111111111111111111111111111112"
+        # amount = 100_000_000  # 0.1 SOL
 
+        # price = swap_manager.query_signature_price(
+        #     '3bJF9jnKCoWxnpP9CAy32sW9q7zMxWLuvDjANiuMkttJeMZaHEFSETGjmLkuF3f4qTeBSVib84S1EntGpfuhDJD9',
+        #     '9Zvb3ZTaLwzKnevr8EbRvYk9CuwoPz7yrhm3wKJapump')
 
-            except Exception as e:
-
-                print(f"Error: {str(e)}")
-
-            await asyncio.sleep(1)
+        # await swap_manager.test_signature_price(test_token)
+        await swap_manager.test_signature_price('DNDQAAVhMkgRP8XY22AJnhRsyL4nGfDQS7UHECKipump')
+        # await swap_manager.execute_swap(
+        #     'buy',
+        #     '3erXBXHFCpZeXHofDbKckBvDaiszVFLi1VfRc5geEEdt',
+        #     0.001,
+        #     '2851U2qCNhaWtJ7UcxLVb9GJj3hWXXbN87RvSmFCD4dzAeaRQm83QoYRigjwgQpnDK3ep2bTTzUYMpevxYrcyrjc',
+        #     True,
+        #     0.001,
+        #     0.01,
+        #     100,
+        #     {},
+        #     None
+        # )
 
 
     asyncio.run(monitor_price())
