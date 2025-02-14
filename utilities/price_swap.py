@@ -143,7 +143,11 @@ class PriceSwapManager:
                 else:
                     instructions = raydium.sell_instructions(client, str(token_address), amount / 100, 100)
             print('获取指令成功开始获取hash')
-            latest_blockhash = client.get_latest_blockhash()
+            try:
+                latest_blockhash = client.get_latest_blockhash()
+            except Exception as e:
+                print('初始化获取hash失败')
+                print(e)
             print('开始初始化jitoclient')
             try:
                 jito_client = await self._init_jito_client()
