@@ -131,6 +131,7 @@ class PriceSwapManager:
             amount = float(amount)
 
             is_pump = True if not pump.get_complete(str(token_address)) else False
+            print('开始获取指令')
             if is_pump:
                 if is_buy:
                     instructions = pump.buy_instruction(str(token_address), amount, 100)
@@ -141,11 +142,11 @@ class PriceSwapManager:
                     instructions = raydium.buy_instructions(client, str(token_address), amount, 100)
                 else:
                     instructions = raydium.sell_instructions(client, str(token_address), amount / 100, 100)
-
+            print('获取指令成功开始获取hash')
             latest_blockhash = client.get_latest_blockhash()
 
             jito_client = await self._init_jito_client()
-
+            print('初始化jitoclient成功')
             # Add Jito tip transaction if specified
             tip_amount = random.uniform(0.0001, 0.05) if not tip_amount else tip_amount
             tip_lamports = int(tip_amount * 1_000_000_000)  # Convert to lamports
