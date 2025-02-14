@@ -144,8 +144,12 @@ class PriceSwapManager:
                     instructions = raydium.sell_instructions(client, str(token_address), amount / 100, 100)
             print('获取指令成功开始获取hash')
             latest_blockhash = client.get_latest_blockhash()
-
-            jito_client = await self._init_jito_client()
+            print('开始初始化jitoclient')
+            try:
+                jito_client = await self._init_jito_client()
+            except Exception as e:
+                print('初始化jitoclient失败')
+                print(e)
             print('初始化jitoclient成功')
             # Add Jito tip transaction if specified
             tip_amount = random.uniform(0.0001, 0.05) if not tip_amount else tip_amount
