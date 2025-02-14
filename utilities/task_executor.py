@@ -592,9 +592,9 @@ class TaskExecutor:
 
                     if 'success' in result and not result['success']:
                         self.log('ERROR', str(result))
-                        return result['entry_price'], result['out_amount']
+                        return result['entry_price'], amount
                     self.log("INFO", f"交易成功: {result['transaction_id']}")
-                    return result['entry_price'], result['out_amount']
+                    return result['entry_price'], amount
                 except Exception as e:
                     traceback.print_stack()
                     self.log("ERROR", f"执行交易失败: {str(e)}")
