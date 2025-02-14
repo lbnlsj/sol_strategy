@@ -488,7 +488,7 @@ def buy_instructions(client, mint_str: str, sol_in: float, slippage: int) -> lis
 def buy(client, mint_str: str, sol_in: float = 0.1, slippage: int = 1) -> list:
 
     try:
-        instructions = buy_instructions(mint_str, sol_in, slippage)
+        instructions = buy_instructions(client, mint_str, sol_in, slippage)
 
         # Create and send transaction
         compiled_message = MessageV0.try_compile(
@@ -610,23 +610,13 @@ def sell_instructions(client, mint_str: str, amount: int, slippage: int):
         close_wsol_account,
     ]
 
-    # if percentage == 100:
-    #     close_token_account = close_account(
-    #         CloseAccountParams(
-    #             program_id=TOKEN_PROGRAM_ID,
-    #             account=token_account,
-    #             dest=payer_keypair.pubkey(),
-    #             owner=payer_keypair.pubkey(),
-    #         )
-    #     )
-    #     instructions.append(close_token_account)
     return instructions
 
 
 def sell(client, mint_str: str, percentage: int = 100, slippage: int = 1):
 
     try:
-        instructions = sell_instructions(mint_str, percentage, slippage)
+        instructions = sell_instructions(client, mint_str, percentage, slippage)
 
         compiled_message = MessageV0.try_compile(
             payer_keypair.pubkey(),
