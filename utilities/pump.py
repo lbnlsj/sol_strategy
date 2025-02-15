@@ -21,8 +21,8 @@ UNIT_BUDGET = 100_000
 UNIT_PRICE = 1_000_000
 client = Client(RPC)
 
-PRIV_KEY = "2851U2qCNhaWtJ7UcxLVb9GJj3hWXXbN87RvSmFCD4dzAeaRQm83QoYRigjwgQpnDK3ep2bTTzUYMpevxYrcyrjc"
-payer_keypair = Keypair.from_base58_string(PRIV_KEY)
+# PRIV_KEY = "2851U2qCNhaWtJ7UcxLVb9GJj3hWXXbN87RvSmFCD4dzAeaRQm83QoYRigjwgQpnDK3ep2bTTzUYMpevxYrcyrjc"
+# payer_keypair = Keypair.from_base58_string(PRIV_KEY)
 
 GLOBAL = Pubkey.from_string("4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf")
 FEE_RECIPIENT = Pubkey.from_string("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM")
@@ -188,7 +188,7 @@ def buy(mint_str: str, sol_in: float = 0.01, slippage: int = 5):
         return False
 
 
-def buy_instruction(mint_str: str, sol_in: float = 0.01, slippage: int = 5):
+def buy_instruction(mint_str: str, sol_in: float = 0.01, slippage: int = 5, payer_keypair: Keypair=None):
     print(f"Starting buy transaction for mint: {mint_str}")
     coin_data = get_coin_data(mint_str)
     if not coin_data:
@@ -201,6 +201,7 @@ def buy_instruction(mint_str: str, sol_in: float = 0.01, slippage: int = 5):
     BONDING_CURVE = coin_data.bonding_curve
     ASSOCIATED_BONDING_CURVE = coin_data.associated_bonding_curve
     USER = payer_keypair.pubkey()
+    # USER = payer_keypair
     try:
         ASSOCIATED_USER = client.get_token_accounts_by_owner(USER, TokenAccountOpts(MINT)).value[0].pubkey
         token_account_instruction = None
@@ -244,7 +245,7 @@ def buy_instruction(mint_str: str, sol_in: float = 0.01, slippage: int = 5):
     return instructions
 
 
-def sell_instruction(mint_str: str, amount: int = 100, slippage: int = 5):
+def sell_instruction(mint_str: str, amount: int = 100, slippage: int = 5, payer_keypair: Pubkey=None):
     print(f"Starting sell transaction for mint: {mint_str}")
     # if not (1 <= percentage <= 100):
     #     print("Percentage must be between 1 and 100.")
@@ -259,7 +260,8 @@ def sell_instruction(mint_str: str, amount: int = 100, slippage: int = 5):
     MINT = coin_data.mint
     BONDING_CURVE = coin_data.bonding_curve
     ASSOCIATED_BONDING_CURVE = coin_data.associated_bonding_curve
-    USER = payer_keypair.pubkey()
+    # USER = payer_keypair.pubkey()
+    USER = payer_keypair
     ASSOCIATED_USER = get_associated_token_address(USER, MINT)
     print("Retrieving token balance...")
     token_balance = get_token_balance(payer_keypair.pubkey(), mint_str)

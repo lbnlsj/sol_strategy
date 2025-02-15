@@ -226,7 +226,7 @@ class TaskExecutor:
                         quota_data
                     )
 
-                    entry_price = buy_amount_sol / amount
+                    # entry_price = buy_amount_sol / amount
 
                     token_amount = 0
                     for _ in range(20):
@@ -245,8 +245,8 @@ class TaskExecutor:
                         if token_amount > 10: break
 
                     if token_amount != 0:
-                        entry_price = buy_amount_sol / token_amount
-
+                        # entry_price = buy_amount_sol / token_amount
+                        pass
                     else:
                         self.log('ERROR', f'长时间没有检测到买入的钱包的余额 wallet: {wallet_pubkey} ca:{task["contractAddress"]}')
 

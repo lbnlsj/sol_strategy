@@ -134,14 +134,14 @@ class PriceSwapManager:
             print('开始获取指令')
             if is_pump:
                 if is_buy:
-                    instructions = pump.buy_instruction(str(token_address), amount, 100)
+                    instructions = pump.buy_instruction(str(token_address), amount, 100, payer)
                 else:
-                    instructions = pump.sell_instruction(str(token_address), amount / 100, 100)
+                    instructions = pump.sell_instruction(str(token_address), amount / 100, 100, payer)
             else:
                 if is_buy:
-                    instructions = raydium.buy_instructions(client, str(token_address), amount, 100)
+                    instructions = raydium.buy_instructions(client, str(token_address), amount, 100, payer)
                 else:
-                    instructions = raydium.sell_instructions(client, str(token_address), amount / 100, 100)
+                    instructions = raydium.sell_instructions(client, str(token_address), amount / 100, 100, payer)
             print('获取指令成功开始获取hash')
             try:
                 latest_blockhash = client.get_latest_blockhash()
@@ -763,7 +763,7 @@ if __name__ == "__main__":
         #     '9Zvb3ZTaLwzKnevr8EbRvYk9CuwoPz7yrhm3wKJapump')
 
         # await swap_manager.test_signature_price(test_token)
-        await swap_manager.test_signature_price('DNDQAAVhMkgRP8XY22AJnhRsyL4nGfDQS7UHECKipump')
+        await swap_manager.test_signature_price('43nobMtSzyarqsjhLPSU4TZpgUeVXwWJv9Kb4PxLpump')
         # await swap_manager.execute_swap(
         #     'buy',
         #     '3erXBXHFCpZeXHofDbKckBvDaiszVFLi1VfRc5geEEdt',

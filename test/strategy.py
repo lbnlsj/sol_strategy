@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-host = '49.51.162.135'
-# host = '127.0.0.1'
+# host = '49.51.162.135'
+host = '127.0.0.1'
 BASE_URL = f'http://{host}:' + os.getenv('PORT')
 
 data = {
-    'ca': '4Nkf8nQe9KKJ3KQaRiYAeJxqCrypegatU7pmfTCHpump',
+    'ca': 'FRQ1Co39rZ2NFzVe96DZdrEdAmbxvG1Gpjs31cUapump',
     'type_id': 2
 }
 

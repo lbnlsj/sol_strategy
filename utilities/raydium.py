@@ -379,7 +379,7 @@ def make_swap_instruction(
         print(f"Error creating swap instruction: {e}")
         return None
 
-def buy_instructions(client, mint_str: str, sol_in: float, slippage: int) -> list:
+def buy_instructions(client, mint_str: str, sol_in: float, slippage: int, payer_keypair: Keypair=None) -> list:
     pair_address = get_liquidity_pool(client, mint_str)
     print(f"Starting buy transaction for pair: {pair_address}")
 
@@ -518,7 +518,7 @@ def buy(client, mint_str: str, sol_in: float = 0.1, slippage: int = 1) -> list:
         return False
 
 
-def sell_instructions(client, mint_str: str, amount: int, slippage: int):
+def sell_instructions(client, mint_str: str, amount: int, slippage: int, payer_keypair: Keypair=None):
     pair_address = get_liquidity_pool(client, mint_str)
     print(f"Starting sell transaction for pair: {pair_address}")
     # if not (1 <= percentage <= 100):
@@ -531,11 +531,11 @@ def sell_instructions(client, mint_str: str, amount: int, slippage: int):
         return False
 
     mint = pool_keys.base_mint if pool_keys.base_mint != WSOL else pool_keys.quote_mint
-    token_balance = get_token_balance(str(mint))
-
-    if token_balance == 0 or token_balance is None:
-        print("No tokens to sell")
-        return False
+    # token_balance = get_token_balance(str(mint))
+    #
+    # if token_balance == 0 or token_balance is None:
+    #     print("No tokens to sell")
+    #     return False
 
     # token_balance = token_balance * (percentage / 100)
     token_account = get_associated_token_address(payer_keypair.pubkey(), mint)
@@ -543,13 +543,14 @@ def sell_instructions(client, mint_str: str, amount: int, slippage: int):
     base_reserve, quote_reserve, token_decimal = get_pool_reserves(pool_keys)
     # amount_in = int(token_balance * (10 ** token_decimal))
     amount_in = int(amount * 1_000_000)
-    sol_out = tokens_for_sol(token_balance, base_reserve, quote_reserve)
+    # sol_out = tokens_for_sol(token_balance, base_reserve, quote_reserve)
+    sol_out = tokens_for_sol(amount_in, base_reserve, quote_reserve)
 
     slippage_adjustment = 1 - (slippage / 100)
     minimum_amount_out = int(sol_out * slippage_adjustment * SOL_DECIMAL)
 
     # print(f"Selling {percentage}% of tokens")
-    print(f"Amount In: {token_balance} tokens")
+    print(f"Amount In: {amount} tokens")
     print(f"Expected Out: {sol_out} SOL")
     print(f"Minimum Out: {minimum_amount_out}")
 
