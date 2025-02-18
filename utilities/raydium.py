@@ -518,7 +518,7 @@ def buy(client, mint_str: str, sol_in: float = 0.1, slippage: int = 1) -> list:
         return False
 
 
-def sell_instructions(client, mint_str: str, amount: int, slippage: int, payer_keypair: Keypair=None):
+def sell_instructions(client, mint_str: str, amount: float, slippage: int, payer_keypair: Keypair=None):
     pair_address = get_liquidity_pool(client, mint_str)
     print(f"Starting sell transaction for pair: {pair_address}")
     # if not (1 <= percentage <= 100):

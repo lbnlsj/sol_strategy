@@ -23,9 +23,10 @@ from solders.transaction_status import TransactionConfirmationStatus
 from solders.signature import Signature
 from solana.rpc.types import TxOpts
 from pathlib import Path
-from solana.rpc.commitment import Processed
+from solana.rpc.commitment import Processed, Confirmed
 from jupiter_python_sdk.jupiter import Jupiter
 from solana.rpc.async_api import AsyncClient
+# from solana.rpc.commitment import Processed
 from solana.rpc.api import Client
 from solders.message import Message, MessageV0
 # from .jito_jsonrpc_sdk import JitoJsonRpcSDK
@@ -136,12 +137,12 @@ class PriceSwapManager:
                 if is_buy:
                     instructions = pump.buy_instruction(str(token_address), amount, 100, payer)
                 else:
-                    instructions = pump.sell_instruction(str(token_address), amount / 100, 100, payer)
+                    instructions = pump.sell_instruction(str(token_address), amount, 100, payer)
             else:
                 if is_buy:
                     instructions = raydium.buy_instructions(client, str(token_address), amount, 100, payer)
                 else:
-                    instructions = raydium.sell_instructions(client, str(token_address), amount / 100, 100, payer)
+                    instructions = raydium.sell_instructions(client, str(token_address), amount, 100, payer)
             print('获取指令成功开始获取hash')
             try:
                 latest_blockhash = client.get_latest_blockhash()
@@ -404,6 +405,146 @@ class PriceSwapManager:
         )
         return jupiter, async_client, payer
 
+    # async def get_current_price(
+    #         self,
+    #         input_mint: str,
+    #         output_mint: str,
+    #         amount: int,
+    #         slippage_bps: int = 100
+    # ) -> Optional[Dict]:
+    #     """Gets current price by fetching the latest transaction for the token"""
+    #     try:
+    #         # print(f'input_mint {input_mint}\t {output_mint}')
+    #         rpc_url = self.settings_manager.settings.get(
+    #             "rpcUrl",
+    #             "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
+    #         )
+    #
+    #         async_client = AsyncClient(rpc_url)
+    #
+    #         # Get recent transactions for the token account
+    #         signature_response = await async_client.get_signatures_for_address(
+    #             Pubkey.from_string(output_mint),
+    #             limit=200
+    #         )
+    #
+    #         if not signature_response.value:
+    #             return {'error': 'No recent transactions found'}
+    #
+    #         for sig_info in signature_response.value:
+    #             try:
+    #                 tx_response = await async_client.get_transaction(
+    #                     Signature.from_string(str(sig_info.signature)),
+    #                     # Signature.from_string('4D2tg1BRWmZ9o8MqGpXrXQuCZYAmcTeebaTifVHuFSEPDeqWf9L9uH74VJX9ASqRrDHXw77c9tB4tfhhwtwSwDfx'),
+    #                     max_supported_transaction_version=0
+    #                 )
+    #
+    #                 if tx_response.value is None or tx_response.value.transaction.meta is None:
+    #                     continue
+    #
+    #                 meta = tx_response.value.transaction.meta
+    #                 if meta.pre_token_balances is None or meta.post_token_balances is None:
+    #                     continue
+    #
+    #                 token_mint = output_mint if str(
+    #                     output_mint) != 'So11111111111111111111111111111111111111112' else input_mint
+    #
+    #                 target_log = ''
+    #                 valid_inx = 0
+    #
+    #                 token_real_change = 0
+    #
+    #                 for pre_token_balance in meta.pre_token_balances:
+    #
+    #                     for post_token_balance in meta.post_token_balances:
+    #                         if pre_token_balance.account_index == post_token_balance.account_index and \
+    #                                 str(pre_token_balance.mint) == token_mint and \
+    #                                 str(post_token_balance.mint) == token_mint:
+    #                             token_pre_amount = int(pre_token_balance.ui_token_amount.amount)
+    #                             token_post_amount = int(post_token_balance.ui_token_amount.amount)
+    #                             token_real_change = abs(token_post_amount - token_pre_amount)
+    #                             break
+    #                     if token_real_change != 0: break
+    #
+    #                 for log in meta.log_messages:
+    #                     valid_log = log.replace(' ', '').split(':')[-1]
+    #                     if len(valid_log) <= 32: continue
+    #                     try:
+    #                         b64_log = base64.b64decode(valid_log)
+    #                     except Exception as e:
+    #                         continue
+    #
+    #                     # pump
+    #                     for inx in range(len(b64_log) - 31):
+    #                         token_bytes = struct.unpack('32s', b64_log[inx: inx + 32])[0]
+    #                         if str(Pubkey.from_bytes(token_bytes)) == token_mint:
+    #                             target_log = valid_log
+    #                             valid_inx = inx
+    #                             break
+    #
+    #                     if valid_inx != 0:
+    #                         break
+    #
+    #                     # ray v4
+    #                     for inx in range(len(b64_log) - 7):
+    #                         amount = struct.unpack('<Q', b64_log[inx: inx + 8])[0]
+    #
+    #                         if abs(amount) == token_real_change:
+    #                             target_log = valid_log
+    #                             valid_inx = inx
+    #                             break
+    #
+    #                     if valid_inx != 0:
+    #                         break
+    #
+    #                 dex = ''
+    #                 b64_log = base64.b64decode(target_log)
+    #                 if valid_inx == 8:
+    #                     dex = 'pump'
+    #                     sol_change = struct.unpack('<Q', b64_log[40:48])[0]
+    #                     token_change = struct.unpack('<Q', b64_log[48:56])[0]
+    #                     price = abs(sol_change / 1e3) / abs(token_change)
+    #                 else:
+    #                     if valid_inx == 0:
+    #                         price = 0
+    #                     else:
+    #                         dex = 'ray v4'
+    #                         if valid_inx < 20:
+    #                             sol_change = struct.unpack('<Q', b64_log[49:57])[0]
+    #                         else:
+    #                             sol_change = struct.unpack('<Q', b64_log[25:33])[0]
+    #                             continue
+    #                         token_change = token_real_change
+    #                         price = abs(sol_change / 1e3) / abs(token_change)
+    #
+    #                 if price == 0: continue
+    #                 print(
+    #                     f"{price} {str(sig_info.signature)} sol:change{sol_change / 10e9} {token_change / 10e5} {dex}")
+    #                 if price > 0.1:
+    #                     print()
+    #
+    #                 # await asyncio.sleep(0.5)
+    #                 return {
+    #                     'price': price,
+    #                     'inAmount': sol_change,
+    #                     'outAmount': token_change,
+    #                     'priceImpactPct': 0.1,
+    #                     'transaction': str(sig_info.signature)
+    #                 }
+    #
+    #             except Exception as e:
+    #                 # traceback.print_stack()
+    #                 print(f"Error processing transaction {sig_info.signature}: {str(e)}")
+    #                 continue
+    #
+    #         # Fallback to Jupiter quote if no valid swap transactions found
+    #         await asyncio.sleep(2)
+    #         return await self.get_current_price(input_mint, output_mint, amount, slippage_bps)
+    #
+    #     except Exception as e:
+    #         traceback.print_stack()
+    #         return {'error': str(e)}
+
     async def get_current_price(
             self,
             input_mint: str,
@@ -411,138 +552,33 @@ class PriceSwapManager:
             amount: int,
             slippage_bps: int = 100
     ) -> Optional[Dict]:
-        """Gets current price by fetching the latest transaction for the token"""
-        try:
-            # print(f'input_mint {input_mint}\t {output_mint}')
-            rpc_url = self.settings_manager.settings.get(
-                "rpcUrl",
-                "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
-            )
+        rpc_url = self.settings_manager.settings.get(
+            "rpcUrl",
+            "https://staked.helius-rpc.com?api-key=bc8bd2ae-8330-4a02-9c98-2970d98545cd"
+        )
 
-            async_client = AsyncClient(rpc_url)
+        async_client = AsyncClient(rpc_url)
 
-            # Get recent transactions for the token account
-            signature_response = await async_client.get_signatures_for_address(
-                Pubkey.from_string(output_mint),
-                limit=200
-            )
+        mint_str = input_mint if input_mint != 'So11111111111111111111111111111111111111112' else output_mint
 
-            if not signature_response.value:
-                return {'error': 'No recent transactions found'}
-
-            for sig_info in signature_response.value:
-                try:
-                    tx_response = await async_client.get_transaction(
-                        Signature.from_string(str(sig_info.signature)),
-                        # Signature.from_string('4D2tg1BRWmZ9o8MqGpXrXQuCZYAmcTeebaTifVHuFSEPDeqWf9L9uH74VJX9ASqRrDHXw77c9tB4tfhhwtwSwDfx'),
-                        max_supported_transaction_version=0
-                    )
-
-                    if tx_response.value is None or tx_response.value.transaction.meta is None:
-                        continue
-
-                    meta = tx_response.value.transaction.meta
-                    if meta.pre_token_balances is None or meta.post_token_balances is None:
-                        continue
-
-                    token_mint = output_mint if str(
-                        output_mint) != 'So11111111111111111111111111111111111111112' else input_mint
-
-                    target_log = ''
-                    valid_inx = 0
-
-                    token_real_change = 0
-
-                    for pre_token_balance in meta.pre_token_balances:
-
-                        for post_token_balance in meta.post_token_balances:
-                            if pre_token_balance.account_index == post_token_balance.account_index and \
-                                    str(pre_token_balance.mint) == token_mint and \
-                                    str(post_token_balance.mint) == token_mint:
-                                token_pre_amount = int(pre_token_balance.ui_token_amount.amount)
-                                token_post_amount = int(post_token_balance.ui_token_amount.amount)
-                                token_real_change = abs(token_post_amount - token_pre_amount)
-                                break
-                        if token_real_change != 0: break
-
-                    for log in meta.log_messages:
-                        valid_log = log.replace(' ', '').split(':')[-1]
-                        if len(valid_log) <= 32: continue
-                        try:
-                            b64_log = base64.b64decode(valid_log)
-                        except Exception as e:
-                            continue
-
-                        # pump
-                        for inx in range(len(b64_log) - 31):
-                            token_bytes = struct.unpack('32s', b64_log[inx: inx + 32])[0]
-                            if str(Pubkey.from_bytes(token_bytes)) == token_mint:
-                                target_log = valid_log
-                                valid_inx = inx
-                                break
-
-                        if valid_inx != 0:
-                            break
-
-                        # ray v4
-                        for inx in range(len(b64_log) - 7):
-                            amount = struct.unpack('<Q', b64_log[inx: inx + 8])[0]
-
-                            if abs(amount) == token_real_change:
-                                target_log = valid_log
-                                valid_inx = inx
-                                break
-
-                        if valid_inx != 0:
-                            break
-
-                    dex = ''
-                    b64_log = base64.b64decode(target_log)
-                    if valid_inx == 8:
-                        dex = 'pump'
-                        sol_change = struct.unpack('<Q', b64_log[40:48])[0]
-                        token_change = struct.unpack('<Q', b64_log[48:56])[0]
-                        price = abs(sol_change / 1e3) / abs(token_change)
-                    else:
-                        if valid_inx == 0:
-                            price = 0
-                        else:
-                            dex = 'ray v4'
-                            if valid_inx < 20:
-                                sol_change = struct.unpack('<Q', b64_log[49:57])[0]
-                            else:
-                                sol_change = struct.unpack('<Q', b64_log[25:33])[0]
-                                continue
-                            token_change = token_real_change
-                            price = abs(sol_change / 1e3) / abs(token_change)
-
-                    if price == 0: continue
-                    print(
-                        f"{price} {str(sig_info.signature)} sol:change{sol_change / 10e9} {token_change / 10e5} {dex}")
-                    if price > 0.1:
-                        print()
-
-                    # await asyncio.sleep(0.5)
-                    return {
-                        'price': price,
-                        'inAmount': sol_change,
-                        'outAmount': token_change,
-                        'priceImpactPct': 0.1,
-                        'transaction': str(sig_info.signature)
-                    }
-
-                except Exception as e:
-                    # traceback.print_stack()
-                    print(f"Error processing transaction {sig_info.signature}: {str(e)}")
-                    continue
-
-            # Fallback to Jupiter quote if no valid swap transactions found
-            await asyncio.sleep(2)
-            return await self.get_current_price(input_mint, output_mint, amount, slippage_bps)
-
-        except Exception as e:
-            traceback.print_stack()
-            return {'error': str(e)}
+        signature_response = await async_client.get_signatures_for_address(
+            Pubkey.from_string(mint_str),
+            limit=200
+        )
+        for sig_info in signature_response.value:
+            if sig_info.err is not None: continue
+            try:
+                price = self.query_signature_price(str(sig_info.signature), mint_str)
+                if price is False: continue
+                return {
+                    'price': float(price)
+                }
+            # except ValueError as e:
+            #     print('1 https://solscan.io/tx/' + str(sig_info.signature))
+            except Exception as e:
+                print(e)
+                print('2 https://solscan.io/tx/' + str(sig_info.signature))
+                continue
 
     async def test_signature_price(self, mint_str: str):
         rpc_url = self.settings_manager.settings.get(
@@ -552,22 +588,26 @@ class PriceSwapManager:
 
         async_client = AsyncClient(rpc_url)
 
-        signature_response = await async_client.get_signatures_for_address(
-            Pubkey.from_string(mint_str),
-            limit=200
-        )
-        print(f'一共监测到{len(signature_response.value)}条信息')
-        for sig_info in signature_response.value:
-            if sig_info.err is not None: continue
-            try:
-                price = self.query_signature_price(str(sig_info.signature), mint_str)
-                if price is False: continue
-            # except ValueError as e:
-            #     print('1 https://solscan.io/tx/' + str(sig_info.signature))
-            except Exception as e:
-                print(e)
-                print('2 https://solscan.io/tx/' + str(sig_info.signature))
-                continue
+        while 1:
+            signature_response = await async_client.get_signatures_for_address(
+                Pubkey.from_string(mint_str),
+                limit=20,
+                commitment=Confirmed
+            )
+            print(f'一共监测到{len(signature_response.value)}条信息')
+            for sig_info in signature_response.value:
+                if sig_info.err is not None: continue
+                try:
+                    price = self.query_signature_price(str(sig_info.signature), mint_str)
+                    if price is False: continue
+                    await asyncio.sleep(1)
+                    break
+                # except ValueError as e:
+                #     print('1 https://solscan.io/tx/' + str(sig_info.signature))
+                except Exception as e:
+                    print(e)
+                    print('2 https://solscan.io/tx/' + str(sig_info.signature))
+                    continue
 
     # 这里需要补充 查询dex类型，日志分析
     def query_signature_price(self, signature: str, mint_str: str) -> float:
@@ -582,8 +622,11 @@ class PriceSwapManager:
         client = Client(rpc_url)
         tx_response = client.get_transaction(
             Signature.from_string(signature),
-            max_supported_transaction_version=0
+            max_supported_transaction_version=0,
+            commitment=Confirmed
         )
+        if tx_response.value is None:
+            raise Exception('tx_response.value is None')
         logs = tx_response.value.transaction.meta.log_messages
         logs_text = ''.join(logs)
         pump_logs = re.findall('Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P successProgram data: (.*?)Program',
@@ -645,14 +688,21 @@ class PriceSwapManager:
                     else:
                         accounts_index += instruction.accounts
                         tmp_amount[1] = struct.unpack('<BQ', base58.b58decode(instruction.data)[0:9])[1]
-                        sol_change = min(tmp_amount[:2])
-                        token_change = max(tmp_amount[:2])
-                        price = abs(sol_change / 1e3) / abs(token_change)
+                        # sol_change = min(tmp_amount[:2])
+                        # token_change = max(tmp_amount[:2])
+                        # price = abs(sol_change / 1e3) / abs(token_change)
 
                         if pool_account_index in accounts_index:
                             # if price < 2.002882147323973e-08:
                             #     print(f'3 https://solscan.io/tx/' + signature)
                             #     raise Exception
+                            if pool_account_index in instruction.accounts:
+                                sol_change = tmp_amount[0]
+                                token_change = tmp_amount[1]
+                            else:
+                                sol_change = tmp_amount[1]
+                                token_change = tmp_amount[0]
+                            price = abs(sol_change / 1e3) / abs(token_change)
                             print(f'{price} sol change: {sol_change}, token change: {token_change} {signature}')
                             return price
                         accounts_index = []
@@ -674,11 +724,18 @@ class PriceSwapManager:
                     else:
                         accounts_index += instruction.accounts
                         tmp_amount[1] = struct.unpack('<BQ', base58.b58decode(instruction.data)[0:9])[1]
-                        sol_change = min(tmp_amount[:2])
-                        token_change = max(tmp_amount[:2])
-                        price = abs(sol_change / 1e3) / abs(token_change)
+                        # sol_change = min(tmp_amount[:2])
+                        # token_change = max(tmp_amount[:2])
+                        # price = abs(sol_change / 1e3) / abs(token_change)
 
                         if pool_account_index in accounts_index:
+                            if pool_account_index in instruction.accounts:
+                                sol_change = tmp_amount[0]
+                                token_change = tmp_amount[1]
+                            else:
+                                sol_change = tmp_amount[1]
+                                token_change = tmp_amount[0]
+                            price = abs(sol_change / 1e3) / abs(token_change)
                             # if price > 1e-6:
                             #     print(f'3 https://solscan.io/tx/' + signature)
                             #     raise Exception
@@ -759,11 +816,11 @@ if __name__ == "__main__":
         # amount = 100_000_000  # 0.1 SOL
 
         # price = swap_manager.query_signature_price(
-        #     '3bJF9jnKCoWxnpP9CAy32sW9q7zMxWLuvDjANiuMkttJeMZaHEFSETGjmLkuF3f4qTeBSVib84S1EntGpfuhDJD9',
-        #     '9Zvb3ZTaLwzKnevr8EbRvYk9CuwoPz7yrhm3wKJapump')
+        #     '1xstcQn42gbbJ1pvB6CqTr5Ncqi3oi8noLQ9zgtBTqbJEG3tP1auRd48aHYNo9W9dChcRD36L7PcJpEyRuZpPK1',
+        #     '7PtCM7yZWugP7vCvTcNr7LG7tYLZ6r5m8KeqDUn5pump')
 
         # await swap_manager.test_signature_price(test_token)
-        await swap_manager.test_signature_price('43nobMtSzyarqsjhLPSU4TZpgUeVXwWJv9Kb4PxLpump')
+        await swap_manager.test_signature_price('G9ja4srxSzQdSSWEbvmbhTQrLHjxRjEAtZ1aYTnupump')
         # await swap_manager.execute_swap(
         #     'buy',
         #     '3erXBXHFCpZeXHofDbKckBvDaiszVFLi1VfRc5geEEdt',

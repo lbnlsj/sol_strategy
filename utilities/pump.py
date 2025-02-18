@@ -152,7 +152,15 @@ def get_coin_data(mint_str: str) -> Optional[CoinData]:
         return None
     virtual_reserves = get_virtual_reserves(bonding_curve)
     if virtual_reserves is None:
-        return None
+        return CoinData(
+            mint=Pubkey.from_string(mint_str),
+            bonding_curve=bonding_curve,
+            associated_bonding_curve=associated_bonding_curve,
+            virtual_token_reserves=0,
+            virtual_sol_reserves=0,
+            token_total_supply=0,
+            complete=False,
+        )
     try:
         return CoinData(
             mint=Pubkey.from_string(mint_str),
@@ -245,7 +253,7 @@ def buy_instruction(mint_str: str, sol_in: float = 0.01, slippage: int = 5, paye
     return instructions
 
 
-def sell_instruction(mint_str: str, amount: int = 100, slippage: int = 5, payer_keypair: Pubkey=None):
+def sell_instruction(mint_str: str, amount: float = 100, slippage: int = 5, payer_keypair: Keypair=None):
     print(f"Starting sell transaction for mint: {mint_str}")
     # if not (1 <= percentage <= 100):
     #     print("Percentage must be between 1 and 100.")
@@ -261,7 +269,7 @@ def sell_instruction(mint_str: str, amount: int = 100, slippage: int = 5, payer_
     BONDING_CURVE = coin_data.bonding_curve
     ASSOCIATED_BONDING_CURVE = coin_data.associated_bonding_curve
     # USER = payer_keypair.pubkey()
-    USER = payer_keypair
+    USER = payer_keypair.pubkey()
     ASSOCIATED_USER = get_associated_token_address(USER, MINT)
     print("Retrieving token balance...")
     token_balance = get_token_balance(payer_keypair.pubkey(), mint_str)

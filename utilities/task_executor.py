@@ -242,7 +242,7 @@ class TaskExecutor:
                             print('查询价格失败：' + str(e))
                             pass
                         if token_amount is None: continue
-                        if token_amount > 10: break
+                        if token_amount > 1: break
 
                     if token_amount != 0:
                         # entry_price = buy_amount_sol / token_amount
