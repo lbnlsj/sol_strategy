@@ -81,7 +81,11 @@ ps aux | grep python
 tail -f app.log
 ```
 
-### 方式二：使用Supervisor
+### 方式二：使用脚本
+```bash
+sudo chmod +x run.sh  # 设置脚本权限命令，只需要执行一次
+./run.sh  # 执行脚本
+```
 
 
 
