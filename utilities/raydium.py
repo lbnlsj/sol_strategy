@@ -29,7 +29,7 @@ UNIT_BUDGET = 100_000
 UNIT_PRICE = 1_000_000
 
 # Initialize client and keypair
-client = Client(RPC)
+# client = Client(RPC)
 payer_keypair = Keypair.from_base58_string(PRIV_KEY)
 
 # Program IDs
@@ -179,7 +179,7 @@ def get_liquidity_pool(client, mint_str: str) -> Optional[str]:
         return str(pools.value[0].pubkey)
 
 
-def confirm_txn(txn_sig, max_retries: int = 20, retry_interval: int = 3):
+def confirm_txn(client, txn_sig, max_retries: int = 20, retry_interval: int = 3):
     retries = 1
     while retries < max_retries:
         try:
@@ -200,7 +200,7 @@ def confirm_txn(txn_sig, max_retries: int = 20, retry_interval: int = 3):
     return None
 
 
-def get_token_balance(mint_str: str) -> Optional[float]:
+def get_token_balance(client, mint_str: str) -> Optional[float]:
     try:
         mint = Pubkey.from_string(mint_str)
         response = client.get_token_accounts_by_owner_json_parsed(
@@ -235,7 +235,7 @@ def tokens_for_sol(token_amount: float, base_vault_balance: float, quote_vault_b
     return round(sol_received, 9)
 
 
-def fetch_amm_v4_pool_keys(pair_address: str) -> Optional[AmmV4PoolKeys]:
+def fetch_amm_v4_pool_keys(client, pair_address: str) -> Optional[AmmV4PoolKeys]:
     def bytes_of(value):
         if not (0 <= value < 2 ** 64):
             raise ValueError("Value must be in the range of a u64 (0 to 2^64 - 1).")
@@ -299,7 +299,7 @@ def fetch_amm_v4_pool_keys(pair_address: str) -> Optional[AmmV4PoolKeys]:
         return None
 
 
-def get_pool_reserves(pool_keys: AmmV4PoolKeys) -> tuple:
+def get_pool_reserves(client, pool_keys: AmmV4PoolKeys) -> tuple:
     try:
         quote_vault = pool_keys.quote_vault
         quote_decimal = pool_keys.quote_decimals
@@ -383,7 +383,7 @@ def buy_instructions(client, mint_str: str, sol_in: float, slippage: int, payer_
     pair_address = get_liquidity_pool(client, mint_str)
     print(f"Starting buy transaction for pair: {pair_address}")
 
-    pool_keys = fetch_amm_v4_pool_keys(pair_address)
+    pool_keys = fetch_amm_v4_pool_keys(client, pair_address)
     if pool_keys is None:
         print("Failed to fetch pool keys")
         return False
@@ -411,7 +411,7 @@ def buy_instructions(client, mint_str: str, sol_in: float, slippage: int, payer_
 
     # Calculate amounts
     amount_in = int(sol_in * SOL_DECIMAL)
-    base_reserve, quote_reserve, token_decimal = get_pool_reserves(pool_keys)
+    base_reserve, quote_reserve, token_decimal = get_pool_reserves(client, pool_keys)
     amount_out = sol_for_tokens(sol_in, base_reserve, quote_reserve)
 
     slippage_adjustment = 1 - (slippage / 100)
@@ -506,7 +506,7 @@ def buy(client, mint_str: str, sol_in: float = 0.1, slippage: int = 1) -> list:
         print(f"Transaction sent: https://solscan.io/tx/{txn_sig}")
 
         # Wait for confirmation
-        if confirm_txn(txn_sig):
+        if confirm_txn(client, txn_sig):
             print("Buy transaction successful")
             return txn_sig
         else:
@@ -525,7 +525,7 @@ def sell_instructions(client, mint_str: str, amount: float, slippage: int, payer
     #     print("Percentage must be between 1 and 100")
     #     return False
 
-    pool_keys = fetch_amm_v4_pool_keys(pair_address)
+    pool_keys = fetch_amm_v4_pool_keys(client, pair_address)
     if pool_keys is None:
         print("Failed to fetch pool keys")
         return False
@@ -540,7 +540,7 @@ def sell_instructions(client, mint_str: str, amount: float, slippage: int, payer
     # token_balance = token_balance * (percentage / 100)
     token_account = get_associated_token_address(payer_keypair.pubkey(), mint)
 
-    base_reserve, quote_reserve, token_decimal = get_pool_reserves(pool_keys)
+    base_reserve, quote_reserve, token_decimal = get_pool_reserves(client, pool_keys)
     # amount_in = int(token_balance * (10 ** token_decimal))
     amount_in = int(amount * 1_000_000)
     # sol_out = tokens_for_sol(token_balance, base_reserve, quote_reserve)
@@ -633,7 +633,7 @@ def sell(client, mint_str: str, percentage: int = 100, slippage: int = 1):
 
         print(f"Transaction sent: https://solscan.io/tx/{txn_sig}")
 
-        if confirm_txn(txn_sig):
+        if confirm_txn(client, txn_sig):
             print("Sell transaction successful")
             return txn_sig
         else:

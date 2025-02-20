@@ -135,9 +135,9 @@ class PriceSwapManager:
             print('开始获取指令')
             if is_pump:
                 if is_buy:
-                    instructions = pump.buy_instruction(str(token_address), amount, 100, payer)
+                    instructions = pump.buy_instruction(client, str(token_address), amount, 100, payer)
                 else:
-                    instructions = pump.sell_instruction(str(token_address), amount, 100, payer)
+                    instructions = pump.sell_instruction(client, str(token_address), amount, 100, payer)
             else:
                 if is_buy:
                     instructions = raydium.buy_instructions(client, str(token_address), amount, 100, payer)

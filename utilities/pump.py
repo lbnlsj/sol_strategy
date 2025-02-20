@@ -196,7 +196,7 @@ def buy(mint_str: str, sol_in: float = 0.01, slippage: int = 5):
         return False
 
 
-def buy_instruction(mint_str: str, sol_in: float = 0.01, slippage: int = 5, payer_keypair: Keypair=None):
+def buy_instruction(client, mint_str: str, sol_in: float = 0.01, slippage: int = 5, payer_keypair: Keypair=None):
     print(f"Starting buy transaction for mint: {mint_str}")
     coin_data = get_coin_data(mint_str)
     if not coin_data:
@@ -253,7 +253,7 @@ def buy_instruction(mint_str: str, sol_in: float = 0.01, slippage: int = 5, paye
     return instructions
 
 
-def sell_instruction(mint_str: str, amount: float = 100, slippage: int = 5, payer_keypair: Keypair=None):
+def sell_instruction(client, mint_str: str, amount: float = 100, slippage: int = 5, payer_keypair: Keypair=None):
     print(f"Starting sell transaction for mint: {mint_str}")
     # if not (1 <= percentage <= 100):
     #     print("Percentage must be between 1 and 100.")

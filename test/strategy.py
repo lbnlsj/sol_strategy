@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# host = '49.51.162.135'
+# host = '43.157.45.202'
 host = '127.0.0.1'
 BASE_URL = f'http://{host}:' + os.getenv('PORT')
 
 data = {
     'ca': 'G9ja4srxSzQdSSWEbvmbhTQrLHjxRjEAtZ1aYTnupump',
-    'type_id': 2
+    'type_id': 5
 }
 
 response = requests.post(BASE_URL + '/api/tasks', json=data)
