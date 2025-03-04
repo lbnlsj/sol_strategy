@@ -518,6 +518,7 @@ class TaskExecutor:
             await asyncio.sleep(self.get_debug_query_time())
             return entry_price
         else:
+
             try:
                 sol_mint = "So11111111111111111111111111111111111111112"
                 quote_data = await self.price_swap.get_current_price(

@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Optional, Dict, Tuple, Union
 import logging
 import traceback
+import requests
 import random
 import base58
 from solana.rpc import types
@@ -545,7 +546,7 @@ class PriceSwapManager:
     #         traceback.print_stack()
     #         return {'error': str(e)}
 
-    async def get_current_price(
+    async def get_current_price1(
             self,
             input_mint: str,
             output_mint: str,
@@ -579,6 +580,26 @@ class PriceSwapManager:
                 print(e)
                 print('2 https://solscan.io/tx/' + str(sig_info.signature))
                 continue
+
+    async def get_current_price(
+            self,
+            input_mint: str,
+            output_mint: str,
+            amount: int,
+            slippage_bps: int = 100
+    ) -> Optional[Dict]:
+        mint_str = input_mint if input_mint != 'So11111111111111111111111111111111111111112' else output_mint
+        try:
+            response = requests.get('http://49.51.171.200:3001/v1/getPrice?mint=' + mint_str)
+            return {
+                    'price': float(response.json()['p'])
+            }
+        except Exception as e:
+            print('价格查询失败')
+            return {
+                'price': '价格查询失败'
+            }
+
 
     async def test_signature_price(self, mint_str: str):
         rpc_url = self.settings_manager.settings.get(
