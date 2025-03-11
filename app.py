@@ -16,6 +16,7 @@ import hashlib
 from dotenv import load_dotenv
 from functools import wraps, update_wrapper
 from encrypto import n
+from utilities.task_executor import TaskExecutor
 
 load_dotenv()
 
@@ -52,6 +53,9 @@ task_manager = TaskManager(storage)
 log_manager = LogManager(storage)
 # 初始化任务执行器
 initialize_task_executor(app, storage, task_manager, strategy_manager, log_manager)
+
+storage_manager = StorageManager()
+task_executor = TaskExecutor(storage_manager)
 
 
 # 登录路由
@@ -584,6 +588,11 @@ def set_all_tasks_stop():
     for key in tasks.keys():
         tasks[key]['status'] = 'stopped'
     open('data/tasks.json', 'w', encoding='utf-8').write(json.dumps(tasks))
+
+
+def init_app():
+    setup_something()
+    return app
 
 
 if __name__ == '__main__':

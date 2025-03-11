@@ -806,6 +806,45 @@ class PriceSwapManager:
             "pool_token_account1": pool_accounts[str(token_mint1)]
         }
 
+    def get_token_balance_sync(self, token_address, wallet_address):
+        """同步版本的获取代币余额方法"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(self.get_token_balance(token_address, wallet_address))
+        finally:
+            loop.close()
+    
+    def check_transaction_status_sync(self, tx_id):
+        """同步版本的检查交易状态方法"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(self.check_transaction_status(tx_id))
+        finally:
+            loop.close()
+    
+    def get_current_price_sync(self, input_mint, output_mint, amount, slippage_bps):
+        """同步版本的获取当前价格方法"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(self.get_current_price(input_mint, output_mint, amount, slippage_bps))
+        finally:
+            loop.close()
+    
+    def execute_swap_sync(self, direction, token_address, amount, wallet_key, use_jito, priority_fee, tip_amount, slippage_bps, quote_response):
+        """同步版本的执行交易方法"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(self.execute_swap(
+                direction, token_address, amount, wallet_key, use_jito, 
+                priority_fee, tip_amount, slippage_bps, quote_response
+            ))
+        finally:
+            loop.close()
+
 
 if __name__ == "__main__":
     import asyncio
